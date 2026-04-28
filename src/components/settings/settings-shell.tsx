@@ -15,6 +15,7 @@ import {
   Keyboard,
   Menu,
   MessageSquareText,
+  Network,
   SendHorizontal,
   Palette,
   PlugZap,
@@ -48,6 +49,7 @@ interface SettingsNavItem {
     | "chat_channels"
     | "system"
     | "web_service"
+    | "ssh_connections"
   icon: ComponentType<{ className?: string }>
 }
 
@@ -101,6 +103,11 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     href: "/settings/chat-channels",
     labelKey: "chat_channels",
     icon: SendHorizontal,
+  },
+  {
+    href: "/settings/ssh-connections",
+    labelKey: "ssh_connections",
+    icon: Network,
   },
   {
     href: "/settings/web-service",

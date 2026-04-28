@@ -34,8 +34,9 @@ mod tauri_app {
     use crate::acp::manager::ConnectionManager;
     use crate::chat_channel::manager::ChatChannelManager;
     use crate::commands::{
-        acp as acp_commands, chat_channel as chat_channel_commands, conversations,
-        experts as experts_commands, folder_commands, folders, mcp as mcp_commands,
+        acp as acp_commands, chat_channel as chat_channel_commands,
+        connections as connections_commands, conversations, experts as experts_commands,
+        folder_commands, folders, mcp as mcp_commands,
         model_provider as model_provider_commands, notification, project_boot,
         quick_messages as quick_messages_commands, system_settings,
         terminal as terminal_commands, version_control, windows,
@@ -499,6 +500,12 @@ mod tauri_app {
                 chat_channel_commands::set_chat_message_language,
                 chat_channel_commands::weixin_get_qrcode,
                 chat_channel_commands::weixin_check_qrcode,
+                connections_commands::list_connections,
+                connections_commands::create_connection,
+                connections_commands::update_connection,
+                connections_commands::delete_connection,
+                connections_commands::list_ssh_config_aliases,
+                connections_commands::test_connection,
                 model_provider_commands::list_model_providers,
                 model_provider_commands::create_model_provider,
                 model_provider_commands::update_model_provider,

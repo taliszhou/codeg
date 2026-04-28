@@ -9,6 +9,31 @@ fn channel_token_key(channel_id: i32) -> String {
     format!("chat-channel:{}", channel_id)
 }
 
+/// Credential kinds for remote SSH connections.
+/// Stored alongside the connection_id under the same `codeg` keyring service.
+#[derive(Debug, Clone, Copy)]
+pub enum SshCredentialKind {
+    KeyPassphrase,
+    Password,
+}
+
+impl SshCredentialKind {
+    fn suffix(self) -> &'static str {
+        match self {
+            SshCredentialKind::KeyPassphrase => "key_passphrase",
+            SshCredentialKind::Password => "password",
+        }
+    }
+
+    pub fn all() -> [SshCredentialKind; 2] {
+        [SshCredentialKind::KeyPassphrase, SshCredentialKind::Password]
+    }
+}
+
+fn ssh_credential_key(connection_id: &str, kind: SshCredentialKind) -> String {
+    format!("ssh:{}:{}", connection_id, kind.suffix())
+}
+
 // ── Tauri mode: OS keyring ──
 
 #[cfg(feature = "tauri-runtime")]
@@ -137,4 +162,85 @@ pub fn delete_channel_token(channel_id: i32) -> Result<(), String> {
     let mut tokens = read_tokens();
     tokens.remove(&channel_token_key(channel_id));
     write_tokens(&tokens)
+}
+
+// ── Remote SSH credential helpers ──
+// One service name + per-connection key prefix, like channel tokens.
+
+#[cfg(feature = "tauri-runtime")]
+pub fn set_ssh_credential(
+    connection_id: &str,
+    kind: SshCredentialKind,
+    secret: &str,
+) -> Result<(), String> {
+    let entry = keyring::Entry::new(SERVICE_NAME, &ssh_credential_key(connection_id, kind))
+        .map_err(|e| format!("keyring init error: {e}"))?;
+    entry
+        .set_password(secret)
+        .map_err(|e| format!("keyring set error: {e}"))
+}
+
+#[cfg(feature = "tauri-runtime")]
+pub fn get_ssh_credential(connection_id: &str, kind: SshCredentialKind) -> Option<String> {
+    let entry =
+        keyring::Entry::new(SERVICE_NAME, &ssh_credential_key(connection_id, kind)).ok()?;
+    entry.get_password().ok()
+}
+
+#[cfg(feature = "tauri-runtime")]
+pub fn delete_ssh_credential(
+    connection_id: &str,
+    kind: SshCredentialKind,
+) -> Result<(), String> {
+    let entry = keyring::Entry::new(SERVICE_NAME, &ssh_credential_key(connection_id, kind))
+        .map_err(|e| format!("keyring init error: {e}"))?;
+    match entry.delete_credential() {
+        Ok(()) => Ok(()),
+        Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("keyring delete error: {e}")),
+    }
+}
+
+#[cfg(not(feature = "tauri-runtime"))]
+pub fn set_ssh_credential(
+    connection_id: &str,
+    kind: SshCredentialKind,
+    secret: &str,
+) -> Result<(), String> {
+    let mut tokens = read_tokens();
+    tokens.insert(ssh_credential_key(connection_id, kind), secret.to_string());
+    write_tokens(&tokens)
+}
+
+#[cfg(not(feature = "tauri-runtime"))]
+pub fn get_ssh_credential(connection_id: &str, kind: SshCredentialKind) -> Option<String> {
+    read_tokens()
+        .get(&ssh_credential_key(connection_id, kind))
+        .cloned()
+}
+
+#[cfg(not(feature = "tauri-runtime"))]
+pub fn delete_ssh_credential(
+    connection_id: &str,
+    kind: SshCredentialKind,
+) -> Result<(), String> {
+    let mut tokens = read_tokens();
+    tokens.remove(&ssh_credential_key(connection_id, kind));
+    write_tokens(&tokens)
+}
+
+/// Best-effort delete of every credential associated with a connection.
+/// Errors on individual kinds are aggregated; a `NoEntry` is treated as success.
+pub fn delete_all_ssh_credentials(connection_id: &str) -> Result<(), String> {
+    let mut errors: Vec<String> = Vec::new();
+    for kind in SshCredentialKind::all() {
+        if let Err(e) = delete_ssh_credential(connection_id, kind) {
+            errors.push(e);
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
 }

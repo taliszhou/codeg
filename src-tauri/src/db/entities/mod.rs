@@ -3,6 +3,7 @@ pub mod app_metadata;
 pub mod chat_channel;
 pub mod chat_channel_message_log;
 pub mod chat_channel_sender_context;
+pub mod connection;
 pub mod conversation;
 pub mod folder;
 pub mod folder_command;

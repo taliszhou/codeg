@@ -48,7 +48,8 @@
       "web_service": "Webサービス",
       "model_providers": "モデルプロバイダー",
       "experts": "エキスパート",
-      "quick_messages": "クイックメッセージ"
+      "quick_messages": "クイックメッセージ",
+      "ssh_connections": "SSH Connections"
     }
   },
   "AppearanceSettings": {
@@ -2164,6 +2165,85 @@
       "created": "クイックメッセージを作成しました",
       "saved": "クイックメッセージを保存しました",
       "deleted": "クイックメッセージを削除しました"
+    }
+  },
+  "SshConnectionSettings": {
+    "sectionTitle": "SSH Connections",
+    "sectionDescription": "Manage SSH connections used to host folders on remote machines.",
+    "tabs": {
+      "list": "Connections",
+      "sshConfig": "Import from ~/.ssh/config"
+    },
+    "addConnection": "Add Connection",
+    "loading": "Loading…",
+    "loadFailed": "Failed to load connections.",
+    "emptyHint": "No connections yet. Click \"Add Connection\" or import from ~/.ssh/config.",
+    "noTarget": "(no target)",
+    "lastConnected": "Last connected: {time}",
+    "testButton": "Test",
+    "deleteSuccess": "Connection deleted.",
+    "deleteFailed": "Failed to delete connection.",
+    "badges": {
+      "autoConnect": "auto"
+    },
+    "delete": {
+      "title": "Delete connection",
+      "description": "Delete \"{name}\"? Saved credentials in the system keyring will also be removed.",
+      "willKeep": "This will not remove:",
+      "remoteFiles": "Remote files in ~/.codeg-remote/ on the target host (clean up manually if needed).",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "form": {
+      "titleCreate": "New SSH Connection",
+      "titleEdit": "Edit SSH Connection",
+      "description": "Credentials are stored in the system keyring. The host metadata is stored in codeg's local database.",
+      "name": "Name",
+      "namePlaceholder": "Friendly name (e.g. dev-laptop)",
+      "host": "Host",
+      "port": "Port",
+      "user": "User",
+      "authMethod": "Authentication",
+      "authKey": "SSH key (recommended)",
+      "authPassword": "Password",
+      "authSshConfig": "Inherit from ~/.ssh/config",
+      "privateKey": "Private key",
+      "passphrase": "Passphrase",
+      "passphraseHelp": "Stored securely in the system keyring; leave blank if your key has no passphrase.",
+      "passphraseUnchanged": "Leave blank to keep current passphrase",
+      "password": "Password",
+      "passwordUnchanged": "Leave blank to keep current password",
+      "advanced": "Advanced",
+      "proxyJump": "ProxyJump (bastion host)",
+      "daemonPath": "Remote daemon path",
+      "autoConnect": "Connect automatically when codeg starts",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saveSuccess": "Connection saved.",
+      "saveFailed": "Failed to save connection.",
+      "errNameRequired": "Name is required.",
+      "errHostRequired": "Host or alias is required."
+    },
+    "test": {
+      "title": "Testing \"{name}\"",
+      "failed": "Test failed.",
+      "done": "Done",
+      "close": "Close",
+      "stages": {
+        "dns_resolve": "DNS resolution",
+        "tcp_connect": "TCP connection",
+        "ssh_auth": "SSH authentication",
+        "remote_shell": "Remote shell",
+        "daemon_path_writable": "Remote daemon path writable",
+        "daemon_probe": "Remote daemon probe"
+      }
+    },
+    "sshConfig": {
+      "empty": "No Host blocks found in ~/.ssh/config.",
+      "import": "Import",
+      "imported": "Imported \"{alias}\".",
+      "importFailed": "Failed to import alias.",
+      "loadFailed": "Failed to read ~/.ssh/config."
     }
   }
 }

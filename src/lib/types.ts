@@ -1182,3 +1182,79 @@ export interface ModelProviderInfo {
   created_at: string
   updated_at: string
 }
+
+// ── SSH connections (CG-002.1) ──
+
+export type ConnectionKind = "local" | "ssh"
+export type SshAuthMethod = "key" | "password" | "ssh_config"
+
+export interface ConnectionConfig {
+  id: string
+  name: string
+  kind: ConnectionKind
+  ssh_host: string | null
+  ssh_user: string | null
+  ssh_port: number | null
+  ssh_alias: string | null
+  ssh_key_path: string | null
+  ssh_auth_method: SshAuthMethod
+  proxy_jump: string | null
+  daemon_path: string
+  daemon_version: string | null
+  auto_connect: boolean
+  last_connected_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ConnectionInput {
+  name: string
+  kind: ConnectionKind
+  ssh_host?: string | null
+  ssh_user?: string | null
+  ssh_port?: number | null
+  ssh_alias?: string | null
+  ssh_key_path?: string | null
+  ssh_auth_method: SshAuthMethod
+  proxy_jump?: string | null
+  daemon_path?: string | null
+  auto_connect?: boolean | null
+}
+
+export interface SshConfigEntry {
+  alias: string
+  host: string | null
+  user: string | null
+  port: number | null
+  identity_file: string | null
+  proxy_jump: string | null
+}
+
+export type ConnectionTestStage =
+  | "dns_resolve"
+  | "tcp_connect"
+  | "ssh_auth"
+  | "remote_shell"
+  | "daemon_path_writable"
+  | "daemon_probe"
+
+export type ConnectionTestStageStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failure"
+  | "skipped"
+
+export interface ConnectionTestStageResult {
+  stage: ConnectionTestStage
+  status: ConnectionTestStageStatus
+  elapsed_ms: number
+  message: string | null
+}
+
+/// Payload broadcast on the `connection://test_progress` event for each stage
+/// transition. The Rust side flattens `StageResult` into the envelope.
+export interface ConnectionTestProgressEvent extends ConnectionTestStageResult {
+  test_id: string
+  connection_id: string
+}

@@ -1,5 +1,6 @@
 pub mod agent;
 pub mod chat_channel;
+pub mod connection;
 pub mod conversation;
 pub mod folder;
 pub mod message;

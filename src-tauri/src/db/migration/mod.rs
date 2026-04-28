@@ -14,6 +14,8 @@ mod m20260422_000001_folder_sort_order;
 mod m20260423_000001_drop_folder_parent_branch;
 mod m20260424_000001_folder_color;
 mod m20260424_000002_quick_message;
+mod m20260428_000001_connection;
+
 pub struct Migrator;
 
 #[async_trait::async_trait]
@@ -34,6 +36,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260423_000001_drop_folder_parent_branch::Migration),
             Box::new(m20260424_000001_folder_color::Migration),
             Box::new(m20260424_000002_quick_message::Migration),
+            Box::new(m20260428_000001_connection::Migration),
         ]
     }
 }

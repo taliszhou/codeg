@@ -64,6 +64,10 @@ import type {
   ChannelStatusInfo,
   ChatChannelMessageLog,
   ModelProviderInfo,
+  ConnectionConfig,
+  ConnectionInput,
+  SshConfigEntry,
+  ConnectionTestStageResult,
   PluginCheckSummary,
   QuickMessage,
 } from "./types"
@@ -1755,4 +1759,54 @@ export async function updateModelProvider(params: {
 
 export async function deleteModelProvider(id: number): Promise<void> {
   return getTransport().call("delete_model_provider", { id })
+}
+
+// ── SSH connections (CG-002.1) ──
+
+export async function listConnections(): Promise<ConnectionConfig[]> {
+  return getTransport().call("list_connections")
+}
+
+export async function createConnection(params: {
+  input: ConnectionInput
+  keyPassphrase?: string | null
+  password?: string | null
+}): Promise<ConnectionConfig> {
+  return getTransport().call("create_connection", {
+    input: params.input,
+    keyPassphrase: params.keyPassphrase ?? null,
+    password: params.password ?? null,
+  })
+}
+
+export async function updateConnection(params: {
+  id: string
+  input: ConnectionInput
+  keyPassphrase?: string | null
+  password?: string | null
+}): Promise<ConnectionConfig> {
+  return getTransport().call("update_connection", {
+    id: params.id,
+    input: params.input,
+    keyPassphrase: params.keyPassphrase ?? null,
+    password: params.password ?? null,
+  })
+}
+
+export async function deleteConnection(id: string): Promise<void> {
+  return getTransport().call("delete_connection", { id })
+}
+
+export async function listSshConfigAliases(): Promise<SshConfigEntry[]> {
+  return getTransport().call("list_ssh_config_aliases")
+}
+
+export async function testConnection(params: {
+  id: string
+  testId: string
+}): Promise<ConnectionTestStageResult[]> {
+  return getTransport().call("test_connection", {
+    id: params.id,
+    testId: params.testId,
+  })
 }

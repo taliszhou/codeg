@@ -48,7 +48,8 @@
       "web_service": "Web 服务",
       "model_providers": "模型供应商",
       "experts": "专家",
-      "quick_messages": "快捷消息"
+      "quick_messages": "快捷消息",
+      "ssh_connections": "SSH 连接"
     }
   },
   "AppearanceSettings": {
@@ -2164,6 +2165,85 @@
       "created": "已创建快捷消息",
       "saved": "已保存快捷消息",
       "deleted": "已删除快捷消息"
+    }
+  },
+  "SshConnectionSettings": {
+    "sectionTitle": "SSH 连接",
+    "sectionDescription": "管理用于在远端机器上托管 folder 的 SSH 连接。",
+    "tabs": {
+      "list": "连接",
+      "sshConfig": "从 ~/.ssh/config 导入"
+    },
+    "addConnection": "添加连接",
+    "loading": "加载中…",
+    "loadFailed": "加载连接失败。",
+    "emptyHint": "暂无连接。点击「添加连接」或从 ~/.ssh/config 导入。",
+    "noTarget": "（无目标）",
+    "lastConnected": "最近连接：{time}",
+    "testButton": "测试",
+    "deleteSuccess": "连接已删除。",
+    "deleteFailed": "删除连接失败。",
+    "badges": {
+      "autoConnect": "自动"
+    },
+    "delete": {
+      "title": "删除连接",
+      "description": "删除「{name}」？保存在系统钥匙串中的凭据也会被一并删除。",
+      "willKeep": "下列内容不会被删除：",
+      "remoteFiles": "目标主机 ~/.codeg-remote/ 下的远端文件（如需清理请手动操作）。",
+      "cancel": "取消",
+      "confirm": "删除"
+    },
+    "form": {
+      "titleCreate": "新建 SSH 连接",
+      "titleEdit": "编辑 SSH 连接",
+      "description": "凭据保存在系统钥匙串中，主机元数据保存在 codeg 本地数据库中。",
+      "name": "名称",
+      "namePlaceholder": "便于识别的名称（如 dev-laptop）",
+      "host": "主机",
+      "port": "端口",
+      "user": "用户",
+      "authMethod": "鉴权方式",
+      "authKey": "SSH 密钥（推荐）",
+      "authPassword": "密码",
+      "authSshConfig": "继承 ~/.ssh/config",
+      "privateKey": "私钥文件",
+      "passphrase": "私钥口令",
+      "passphraseHelp": "安全保存在系统钥匙串中；密钥无口令时留空。",
+      "passphraseUnchanged": "留空以保留当前口令",
+      "password": "密码",
+      "passwordUnchanged": "留空以保留当前密码",
+      "advanced": "高级",
+      "proxyJump": "ProxyJump（跳板机）",
+      "daemonPath": "远端 daemon 路径",
+      "autoConnect": "codeg 启动时自动连接",
+      "cancel": "取消",
+      "save": "保存",
+      "saveSuccess": "连接已保存。",
+      "saveFailed": "保存连接失败。",
+      "errNameRequired": "名称为必填项。",
+      "errHostRequired": "必须填写主机或别名之一。"
+    },
+    "test": {
+      "title": "正在测试「{name}」",
+      "failed": "测试失败。",
+      "done": "完成",
+      "close": "关闭",
+      "stages": {
+        "dns_resolve": "DNS 解析",
+        "tcp_connect": "TCP 连接",
+        "ssh_auth": "SSH 鉴权",
+        "remote_shell": "远端 shell",
+        "daemon_path_writable": "远端 daemon 路径可写",
+        "daemon_probe": "远端 daemon 探测"
+      }
+    },
+    "sshConfig": {
+      "empty": "未在 ~/.ssh/config 中找到 Host 块。",
+      "import": "导入",
+      "imported": "已导入「{alias}」。",
+      "importFailed": "导入别名失败。",
+      "loadFailed": "读取 ~/.ssh/config 失败。"
     }
   }
 }
