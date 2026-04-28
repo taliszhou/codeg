@@ -52,7 +52,7 @@ import {
   updateFolderColor,
   deleteConversation,
 } from "@/lib/api"
-import { isDesktop, openFileDialog } from "@/lib/platform"
+import { isDesktop, openFileDialog, subscribe } from "@/lib/platform"
 import type {
   ConnectionConfig,
   ConnectionRuntime,
@@ -1091,27 +1091,75 @@ export function SidebarConversationList({
   // folder; manual import button still works for explicit refresh.
   const lastAutoImportRef = useRef<Map<number, number>>(new Map())
   const inflightAutoImportRef = useRef<Set<number>>(new Set())
+  const triggerRemoteAutoImport = useCallback(
+    (folderId: number, opts?: { force?: boolean }) => {
+      const force = opts?.force ?? false
+      const last = lastAutoImportRef.current.get(folderId) ?? 0
+      if (!force && Date.now() - last < AUTO_IMPORT_MIN_INTERVAL_MS) return
+      if (inflightAutoImportRef.current.has(folderId)) return
+      inflightAutoImportRef.current.add(folderId)
+      void (async () => {
+        try {
+          await importLocalConversations(folderId)
+          lastAutoImportRef.current.set(folderId, Date.now())
+          await refreshConversations()
+        } catch (e) {
+          // Quiet on auto-fire; the manual import button surfaces errors.
+          console.warn(
+            "[sidebar] auto-import remote folder failed",
+            folderId,
+            e
+          )
+        } finally {
+          inflightAutoImportRef.current.delete(folderId)
+        }
+      })()
+    },
+    [refreshConversations]
+  )
+
   useEffect(() => {
     const folderId = activeFolder?.id
     if (folderId == null) return
     if (!activeFolder?.connection_id) return
-    const last = lastAutoImportRef.current.get(folderId) ?? 0
-    if (Date.now() - last < AUTO_IMPORT_MIN_INTERVAL_MS) return
-    if (inflightAutoImportRef.current.has(folderId)) return
-    inflightAutoImportRef.current.add(folderId)
-    void (async () => {
-      try {
-        await importLocalConversations(folderId)
-        lastAutoImportRef.current.set(folderId, Date.now())
-        await refreshConversations()
-      } catch (e) {
-        // Quiet on auto-fire; the manual import button surfaces errors.
-        console.warn("[sidebar] auto-import remote folder failed", folderId, e)
-      } finally {
-        inflightAutoImportRef.current.delete(folderId)
+    triggerRemoteAutoImport(folderId)
+  }, [activeFolder?.id, activeFolder?.connection_id, triggerRemoteAutoImport])
+
+  // CG-002.11: daemon binds a fresh conversation row → WS bridge emits
+  // `connection://remote_conversation_linked` with the SSH connection id.
+  // If the active folder lives on that SSH host, force-fire an import so
+  // the new row appears in the sidebar immediately instead of waiting for
+  // the 30s throttle to elapse.
+  useEffect(() => {
+    let cancelled = false
+    let unlisten: (() => void) | null = null
+    subscribe<{ ssh_connection_id: string }>(
+      "connection://remote_conversation_linked",
+      (payload) => {
+        if (cancelled) return
+        const sshId = payload?.ssh_connection_id
+        if (!sshId) return
+        if (
+          !activeFolder?.connection_id ||
+          activeFolder.connection_id !== sshId
+        )
+          return
+        triggerRemoteAutoImport(activeFolder.id, { force: true })
       }
-    })()
-  }, [activeFolder?.id, activeFolder?.connection_id, refreshConversations])
+    )
+      .then((fn) => {
+        if (cancelled) {
+          fn()
+        } else {
+          unlisten = fn
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      unlisten?.()
+    }
+  }, [activeFolder?.id, activeFolder?.connection_id, triggerRemoteAutoImport])
 
   const persistReorder = useCallback(
     async (order: number[]) => {

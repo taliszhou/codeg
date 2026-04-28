@@ -124,7 +124,9 @@ pub async fn bridge_loop(
                         }
                     };
                     match msg {
-                        Message::Text(text) => relay_frame(&emitter, &text),
+                        Message::Text(text) => {
+                            relay_frame(&emitter, &ssh_connection_id, &text)
+                        }
                         Message::Binary(_)
                         | Message::Ping(_)
                         | Message::Pong(_)
@@ -145,7 +147,7 @@ pub async fn bridge_loop(
     }
 }
 
-fn relay_frame(emitter: &EventEmitter, text: &str) {
+fn relay_frame(emitter: &EventEmitter, ssh_connection_id: &str, text: &str) {
     let frame: DaemonEventFrame = match serde_json::from_str(text) {
         Ok(f) => f,
         Err(e) => {
@@ -153,6 +155,23 @@ fn relay_frame(emitter: &EventEmitter, text: &str) {
             return;
         }
     };
+    // Synthetic side-channel signal: when the daemon binds a fresh
+    // conversation row, ping the desktop so the sidebar list re-imports
+    // immediately. Sidebar's CG-002.9 throttle would otherwise hold off
+    // for 30s while the user keeps the same folder active.
+    if frame.channel == "acp://event"
+        && frame
+            .payload
+            .get("type")
+            .and_then(|v| v.as_str())
+            == Some("conversation_linked")
+    {
+        emit_event(
+            emitter,
+            "connection://remote_conversation_linked",
+            serde_json::json!({ "ssh_connection_id": ssh_connection_id }),
+        );
+    }
     emit_event(emitter, &frame.channel, frame.payload);
 }
 
