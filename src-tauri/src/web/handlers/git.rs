@@ -79,14 +79,14 @@ pub struct GitStatusParams {
 pub async fn git_status(
     Json(params): Json<GitStatusParams>,
 ) -> Result<Json<Vec<folder_commands::GitStatusEntry>>, AppCommandError> {
-    let result = folder_commands::git_status(params.path, params.show_all_untracked).await?;
+    let result = folder_commands::git_status_local(params.path, params.show_all_untracked).await?;
     Ok(Json(result))
 }
 
 pub async fn git_list_all_branches(
     Json(params): Json<PathParams>,
 ) -> Result<Json<folder_commands::GitBranchList>, AppCommandError> {
-    let result = folder_commands::git_list_all_branches(params.path).await?;
+    let result = folder_commands::git_list_all_branches_local(params.path).await?;
     Ok(Json(result))
 }
 
@@ -115,7 +115,8 @@ pub struct GitShowFileParams {
 pub async fn git_show_file(
     Json(params): Json<GitShowFileParams>,
 ) -> Result<Json<String>, AppCommandError> {
-    let result = folder_commands::git_show_file(params.path, params.file, params.ref_name).await?;
+    let result =
+        folder_commands::git_show_file_local(params.path, params.file, params.ref_name).await?;
     Ok(Json(result))
 }
 
@@ -127,7 +128,7 @@ pub struct GitDiffParams {
 }
 
 pub async fn git_diff(Json(params): Json<GitDiffParams>) -> Result<Json<String>, AppCommandError> {
-    let result = folder_commands::git_diff(params.path, params.file).await?;
+    let result = folder_commands::git_diff_local(params.path, params.file).await?;
     Ok(Json(result))
 }
 
@@ -155,7 +156,8 @@ pub async fn git_log(
     Json(params): Json<GitLogParams>,
 ) -> Result<Json<folder_commands::GitLogResult>, AppCommandError> {
     let result =
-        folder_commands::git_log(params.path, params.limit, params.branch, params.remote).await?;
+        folder_commands::git_log_local(params.path, params.limit, params.branch, params.remote)
+            .await?;
     Ok(Json(result))
 }
 

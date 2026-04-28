@@ -9,7 +9,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::acp::types::{ForkResultInfo, PromptInputBlock};
 use crate::acp::LiveSessionSnapshot;
-use crate::commands::folders::{FileEditContent, FilePreviewContent, FileSaveResult};
+use crate::commands::folders::{
+    FileEditContent, FilePreviewContent, FileSaveResult, GitBranchList, GitLogResult,
+    GitStatusEntry,
+};
 use crate::models::{AgentType, ConversationDetail, ConversationSummary};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -353,6 +356,70 @@ impl DaemonClient {
         self.post_json(&url, &body).await
     }
 
+    pub async fn git_status(
+        &self,
+        path: String,
+        show_all_untracked: Option<bool>,
+    ) -> Result<Vec<GitStatusEntry>, ClientError> {
+        let url = format!("{}/api/git_status", self.base_url);
+        let body = GitStatusBody {
+            path,
+            show_all_untracked,
+        };
+        self.post_json(&url, &body).await
+    }
+
+    pub async fn git_diff(
+        &self,
+        path: String,
+        file: Option<String>,
+    ) -> Result<String, ClientError> {
+        let url = format!("{}/api/git_diff", self.base_url);
+        let body = GitDiffBody { path, file };
+        self.post_json(&url, &body).await
+    }
+
+    pub async fn git_log(
+        &self,
+        path: String,
+        limit: Option<u32>,
+        branch: Option<String>,
+        remote: Option<String>,
+    ) -> Result<GitLogResult, ClientError> {
+        let url = format!("{}/api/git_log", self.base_url);
+        let body = GitLogBody {
+            path,
+            limit,
+            branch,
+            remote,
+        };
+        self.post_json(&url, &body).await
+    }
+
+    pub async fn git_show_file(
+        &self,
+        path: String,
+        file: String,
+        ref_name: Option<String>,
+    ) -> Result<String, ClientError> {
+        let url = format!("{}/api/git_show_file", self.base_url);
+        let body = GitShowFileBody {
+            path,
+            file,
+            ref_name,
+        };
+        self.post_json(&url, &body).await
+    }
+
+    pub async fn git_list_all_branches(
+        &self,
+        path: String,
+    ) -> Result<GitBranchList, ClientError> {
+        let url = format!("{}/api/git_list_all_branches", self.base_url);
+        let body = GitPathBody { path };
+        self.post_json(&url, &body).await
+    }
+
     async fn post_json<B: serde::Serialize, R: for<'de> serde::Deserialize<'de>>(
         &self,
         url: &str,
@@ -481,6 +548,43 @@ struct CreateFileBody {
     path: String,
     name: String,
     kind: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitPathBody {
+    path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitStatusBody {
+    path: String,
+    show_all_untracked: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitDiffBody {
+    path: String,
+    file: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitLogBody {
+    path: String,
+    limit: Option<u32>,
+    branch: Option<String>,
+    remote: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GitShowFileBody {
+    path: String,
+    file: String,
+    ref_name: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -201,13 +201,13 @@ fn classify_remote_git_error(operation: &str, stderr: &[u8]) -> AppCommandError 
     AppCommandError::external_command(format!("git {operation} failed"), msg)
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GitStatusEntry {
     pub status: String,
     pub file: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GitBranchList {
     pub local: Vec<String>,
     pub remote: Vec<String>,
@@ -333,7 +333,7 @@ pub struct FileSaveResult {
     pub line_ending: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GitLogEntry {
     pub hash: String,
     pub full_hash: String,
@@ -344,7 +344,7 @@ pub struct GitLogEntry {
     pub pushed: Option<bool>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GitLogFileChange {
     pub path: String,
     pub status: String,
@@ -352,7 +352,7 @@ pub struct GitLogFileChange {
     pub deletions: u32,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct GitLogResult {
     pub entries: Vec<GitLogEntry>,
     pub has_upstream: bool,
@@ -1567,8 +1567,7 @@ pub async fn git_stash_show(
     Ok(entries)
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
-pub async fn git_status(
+pub async fn git_status_local(
     path: String,
     show_all_untracked: Option<bool>,
 ) -> Result<Vec<GitStatusEntry>, AppCommandError> {
@@ -1603,6 +1602,24 @@ pub async fn git_status(
     Ok(entries)
 }
 
+#[cfg(feature = "tauri-runtime")]
+#[tauri::command]
+pub async fn git_status(
+    path: String,
+    show_all_untracked: Option<bool>,
+    db: tauri::State<'_, AppDatabase>,
+    rcm: tauri::State<'_, RemoteConnectionManager>,
+) -> Result<Vec<GitStatusEntry>, AppCommandError> {
+    if let Some((ssh_id, real_path)) = parse_remote_path(&path) {
+        let client = resolve_remote_file_client(&rcm, &db, ssh_id).await?;
+        return client
+            .git_status(real_path.to_string(), show_all_untracked)
+            .await
+            .map_err(client_error_to_app_error);
+    }
+    git_status_local(path, show_all_untracked).await
+}
+
 #[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub async fn git_is_tracked(path: String, file: String) -> Result<bool, AppCommandError> {
     let literal_file = to_git_literal_pathspec(&file);
@@ -1617,8 +1634,10 @@ pub async fn git_is_tracked(path: String, file: String) -> Result<bool, AppComma
     Ok(output.status.success())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
-pub async fn git_diff(path: String, file: Option<String>) -> Result<String, AppCommandError> {
+pub async fn git_diff_local(
+    path: String,
+    file: Option<String>,
+) -> Result<String, AppCommandError> {
     ensure_git_repo(&path)?;
 
     let literal_file = file.as_deref().map(to_git_literal_pathspec);
@@ -1652,6 +1671,24 @@ pub async fn git_diff(path: String, file: Option<String>) -> Result<String, AppC
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[tauri::command]
+pub async fn git_diff(
+    path: String,
+    file: Option<String>,
+    db: tauri::State<'_, AppDatabase>,
+    rcm: tauri::State<'_, RemoteConnectionManager>,
+) -> Result<String, AppCommandError> {
+    if let Some((ssh_id, real_path)) = parse_remote_path(&path) {
+        let client = resolve_remote_file_client(&rcm, &db, ssh_id).await?;
+        return client
+            .git_diff(real_path.to_string(), file)
+            .await
+            .map_err(client_error_to_app_error);
+    }
+    git_diff_local(path, file).await
 }
 
 #[cfg_attr(feature = "tauri-runtime", tauri::command)]
@@ -1732,8 +1769,7 @@ pub async fn git_show_diff(
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
-pub async fn git_show_file(
+pub async fn git_show_file_local(
     path: String,
     file: String,
     ref_name: Option<String>,
@@ -1763,6 +1799,25 @@ pub async fn git_show_file(
     }
 
     Ok(String::from_utf8_lossy(bytes).to_string())
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[tauri::command]
+pub async fn git_show_file(
+    path: String,
+    file: String,
+    ref_name: Option<String>,
+    db: tauri::State<'_, AppDatabase>,
+    rcm: tauri::State<'_, RemoteConnectionManager>,
+) -> Result<String, AppCommandError> {
+    if let Some((ssh_id, real_path)) = parse_remote_path(&path) {
+        let client = resolve_remote_file_client(&rcm, &db, ssh_id).await?;
+        return client
+            .git_show_file(real_path.to_string(), file, ref_name)
+            .await
+            .map_err(client_error_to_app_error);
+    }
+    git_show_file_local(path, file, ref_name).await
 }
 
 pub(crate) async fn git_commit_core(
@@ -1962,8 +2017,9 @@ pub async fn git_add_files(path: String, files: Vec<String>) -> Result<(), AppCo
     Ok(())
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
-pub async fn git_list_all_branches(path: String) -> Result<GitBranchList, AppCommandError> {
+pub async fn git_list_all_branches_local(
+    path: String,
+) -> Result<GitBranchList, AppCommandError> {
     ensure_git_repo(&path)?;
 
     let local_fut = crate::process::tokio_command("git")
@@ -2036,6 +2092,23 @@ pub async fn git_list_all_branches(path: String) -> Result<GitBranchList, AppCom
         remote,
         worktree_branches,
     })
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[tauri::command]
+pub async fn git_list_all_branches(
+    path: String,
+    db: tauri::State<'_, AppDatabase>,
+    rcm: tauri::State<'_, RemoteConnectionManager>,
+) -> Result<GitBranchList, AppCommandError> {
+    if let Some((ssh_id, real_path)) = parse_remote_path(&path) {
+        let client = resolve_remote_file_client(&rcm, &db, ssh_id).await?;
+        return client
+            .git_list_all_branches(real_path.to_string())
+            .await
+            .map_err(client_error_to_app_error);
+    }
+    git_list_all_branches_local(path).await
 }
 
 #[cfg_attr(feature = "tauri-runtime", tauri::command)]
@@ -3504,8 +3577,7 @@ pub async fn create_file_tree_entry(
     create_file_tree_entry_local(root_path, path, name, kind).await
 }
 
-#[cfg_attr(feature = "tauri-runtime", tauri::command)]
-pub async fn git_log(
+pub async fn git_log_local(
     path: String,
     limit: Option<u32>,
     branch: Option<String>,
@@ -3622,6 +3694,26 @@ pub async fn git_log(
         entries,
         has_upstream,
     })
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[tauri::command]
+pub async fn git_log(
+    path: String,
+    limit: Option<u32>,
+    branch: Option<String>,
+    remote: Option<String>,
+    db: tauri::State<'_, AppDatabase>,
+    rcm: tauri::State<'_, RemoteConnectionManager>,
+) -> Result<GitLogResult, AppCommandError> {
+    if let Some((ssh_id, real_path)) = parse_remote_path(&path) {
+        let client = resolve_remote_file_client(&rcm, &db, ssh_id).await?;
+        return client
+            .git_log(real_path.to_string(), limit, branch, remote)
+            .await
+            .map_err(client_error_to_app_error);
+    }
+    git_log_local(path, limit, branch, remote).await
 }
 
 #[cfg_attr(feature = "tauri-runtime", tauri::command)]
