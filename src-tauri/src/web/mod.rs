@@ -547,6 +547,9 @@ pub async fn start_web_server(
         data_dir: app.path().app_data_dir().unwrap_or_default(),
         web_server_state: WebServerState::new(), // placeholder; not used by handlers
         chat_channel_manager: crate::app_state::default_chat_channel_manager(),
+        remote_connections: (*app
+            .state::<crate::remote::RemoteConnectionManager>())
+            .clone_ref(),
     });
 
     // See do_start_web_server_with_state for rationale on the reset.

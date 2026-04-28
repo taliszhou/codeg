@@ -66,6 +66,7 @@ import type {
   ModelProviderInfo,
   ConnectionConfig,
   ConnectionInput,
+  ConnectionRuntime,
   SshConfigEntry,
   ConnectionTestStageResult,
   PluginCheckSummary,
@@ -1809,4 +1810,28 @@ export async function testConnection(params: {
     id: params.id,
     testId: params.testId,
   })
+}
+
+// ── Remote bootstrap (CG-002.4) ──
+
+export async function openConnection(id: string): Promise<void> {
+  return getTransport().call("open_connection", { id })
+}
+
+export async function closeConnection(id: string): Promise<void> {
+  return getTransport().call("close_connection", { id })
+}
+
+export async function resumeConnectionAfterManual(id: string): Promise<void> {
+  return getTransport().call("resume_connection_after_manual", { id })
+}
+
+export async function hardResetConnection(id: string): Promise<void> {
+  return getTransport().call("hard_reset_connection", { id })
+}
+
+export async function getConnectionRuntime(
+  id: string
+): Promise<ConnectionRuntime | null> {
+  return getTransport().call("get_connection_runtime", { id })
 }

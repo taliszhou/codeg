@@ -5,7 +5,8 @@ use crate::keyring_store::{self, SshCredentialKind};
 use crate::models::connection::{
     ConnectionConfig, ConnectionCredentials, ConnectionInput, SshAuthMethod, SshConfigEntry,
 };
-use crate::remote::{connection_test, ssh_config};
+use crate::remote::connection::ConnectionRuntime;
+use crate::remote::{connection_test, ssh_config, RemoteConnectionManager};
 use crate::web::event_bridge::EventEmitter;
 
 #[cfg(feature = "tauri-runtime")]
@@ -118,13 +119,14 @@ pub async fn list_ssh_config_aliases_inner() -> Result<Vec<SshConfigEntry>, AppC
 pub async fn test_connection_inner(
     db: &AppDatabase,
     emitter: &EventEmitter,
+    rcm: Option<&RemoteConnectionManager>,
     id: &str,
     test_id: &str,
 ) -> Result<Vec<connection_test::StageResult>, AppCommandError> {
     let config = connection_service::get_by_id(&db.conn, id)
         .await?
         .ok_or_else(|| AppCommandError::not_found(format!("connection {id} not found")))?;
-    Ok(connection_test::run_test(&config, emitter, test_id).await)
+    Ok(connection_test::run_test(&config, emitter, test_id, rcm).await)
 }
 
 // ── Tauri command wrappers ──
@@ -196,12 +198,112 @@ pub async fn list_ssh_config_aliases() -> Result<Vec<SshConfigEntry>, AppCommand
 #[cfg_attr(feature = "tauri-runtime", tauri::command)]
 pub async fn test_connection(
     db: State<'_, AppDatabase>,
+    rcm: State<'_, RemoteConnectionManager>,
     app: tauri::AppHandle,
     id: String,
     test_id: String,
 ) -> Result<Vec<connection_test::StageResult>, AppCommandError> {
     let emitter = EventEmitter::Tauri(app);
-    test_connection_inner(&db, &emitter, &id, &test_id).await
+    test_connection_inner(&db, &emitter, Some(&rcm), &id, &test_id).await
+}
+
+// ── CG-002.4: connect lifecycle commands ──
+
+pub async fn open_connection_inner(
+    db: &AppDatabase,
+    rcm: &RemoteConnectionManager,
+    id: &str,
+) -> Result<(), AppCommandError> {
+    let cfg = connection_service::get_by_id(&db.conn, id)
+        .await?
+        .ok_or_else(|| AppCommandError::not_found(format!("connection {id} not found")))?;
+    rcm.connect(cfg)
+        .await
+        .map_err(|e| AppCommandError::external_command("open connection", e.to_string()))?;
+    Ok(())
+}
+
+pub async fn close_connection_inner(
+    rcm: &RemoteConnectionManager,
+    id: &str,
+) -> Result<(), AppCommandError> {
+    rcm.disconnect(id)
+        .await
+        .map_err(|e| AppCommandError::external_command("close connection", e.to_string()))?;
+    Ok(())
+}
+
+pub async fn resume_connection_after_manual_inner(
+    rcm: &RemoteConnectionManager,
+    id: &str,
+) -> Result<(), AppCommandError> {
+    rcm.resume_after_manual(id)
+        .await
+        .map_err(|e| AppCommandError::external_command("resume connection", e.to_string()))?;
+    Ok(())
+}
+
+pub async fn hard_reset_connection_inner(
+    rcm: &RemoteConnectionManager,
+    id: &str,
+) -> Result<(), AppCommandError> {
+    rcm.hard_reset(id)
+        .await
+        .map_err(|e| AppCommandError::external_command("hard reset connection", e.to_string()))?;
+    Ok(())
+}
+
+pub async fn get_connection_runtime_inner(
+    rcm: &RemoteConnectionManager,
+    id: &str,
+) -> Option<ConnectionRuntime> {
+    rcm.current_runtime(id).await
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[cfg_attr(feature = "tauri-runtime", tauri::command)]
+pub async fn open_connection(
+    db: State<'_, AppDatabase>,
+    rcm: State<'_, RemoteConnectionManager>,
+    id: String,
+) -> Result<(), AppCommandError> {
+    open_connection_inner(&db, &rcm, &id).await
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[cfg_attr(feature = "tauri-runtime", tauri::command)]
+pub async fn close_connection(
+    rcm: State<'_, RemoteConnectionManager>,
+    id: String,
+) -> Result<(), AppCommandError> {
+    close_connection_inner(&rcm, &id).await
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[cfg_attr(feature = "tauri-runtime", tauri::command)]
+pub async fn resume_connection_after_manual(
+    rcm: State<'_, RemoteConnectionManager>,
+    id: String,
+) -> Result<(), AppCommandError> {
+    resume_connection_after_manual_inner(&rcm, &id).await
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[cfg_attr(feature = "tauri-runtime", tauri::command)]
+pub async fn hard_reset_connection(
+    rcm: State<'_, RemoteConnectionManager>,
+    id: String,
+) -> Result<(), AppCommandError> {
+    hard_reset_connection_inner(&rcm, &id).await
+}
+
+#[cfg(feature = "tauri-runtime")]
+#[cfg_attr(feature = "tauri-runtime", tauri::command)]
+pub async fn get_connection_runtime(
+    rcm: State<'_, RemoteConnectionManager>,
+    id: String,
+) -> Result<Option<ConnectionRuntime>, AppCommandError> {
+    Ok(get_connection_runtime_inner(&rcm, &id).await)
 }
 
 #[cfg(test)]

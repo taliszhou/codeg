@@ -231,6 +231,7 @@ async fn async_main(cli: CliArgs) {
         data_dir,
         web_server_state: WebServerState::new(),
         chat_channel_manager: codeg_lib::app_state::default_chat_channel_manager(),
+        remote_connections: codeg_lib::app_state::default_remote_connection_manager(),
     });
 
     // Bootstrap mode skips chat_channel background tasks and bundled experts

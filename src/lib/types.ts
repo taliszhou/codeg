@@ -1258,3 +1258,90 @@ export interface ConnectionTestProgressEvent extends ConnectionTestStageResult {
   test_id: string
   connection_id: string
 }
+
+// ── Remote bootstrap (CG-002.4) ──
+
+export type ConnectionStatusKind =
+  | "not_attempted"
+  | "probing"
+  | "deploying"
+  | "awaiting_manual"
+  | "launching"
+  | "handshaking"
+  | "live"
+  | "reconnecting"
+  | "cached"
+  | "error"
+  | "disconnected"
+
+/// Tagged union mirroring the Rust `ConnectionStatus` enum. Variants without
+/// data flatten to `{ kind }`; `reconnecting` carries an `attempt` counter.
+export type ConnectionStatusDetail =
+  | { kind: Exclude<ConnectionStatusKind, "reconnecting"> }
+  | { kind: "reconnecting"; attempt: number }
+
+export interface DaemonHandshake {
+  version: string
+  schema_version: string
+  port: number
+  token: string
+  started_at: string
+  pid: number | null
+}
+
+export interface CapabilityFlags {
+  topic_subscribe: boolean
+  remote_terminal: boolean
+  workspace_watch: boolean
+  git_operations: boolean
+  file_editing: boolean
+}
+
+export interface CapabilitiesResponse {
+  version: string
+  schema_version: string
+  agents: string[]
+  features: CapabilityFlags
+  server_time: string
+}
+
+export interface RemoteDaemonBinary {
+  url: string
+  sha256: string
+  size: number
+  exec_name: string
+}
+
+export interface DeploymentTarget {
+  remote_daemon_path: string
+  binary: RemoteDaemonBinary
+  platform_key: string
+  version: string
+}
+
+export interface ManualDeployInstructions {
+  binary_url: string
+  binary_sha256: string
+  remote_target_path: string
+  copy_paste_command: string
+}
+
+export interface ConnectionRuntime {
+  connection_id: string
+  status: ConnectionStatusDetail
+  handshake: DaemonHandshake | null
+  capabilities: CapabilitiesResponse | null
+  local_port: number | null
+  last_error: string | null
+  deployment_target: DeploymentTarget | null
+  manual_instructions: ManualDeployInstructions | null
+}
+
+/// Payload broadcast on `connection://status`. Carries the new status, the
+/// connection id, and (for the error variant) the error message.
+export interface ConnectionStatusEvent {
+  connection_id: string
+  status: ConnectionStatusKind | "error"
+  detail?: ConnectionStatusDetail
+  error?: string
+}

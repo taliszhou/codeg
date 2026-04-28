@@ -6,6 +6,8 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::models::connection::{ConnectionConfig, SshAuthMethod};
+use crate::remote::connection::ConnectionStatus;
+use crate::remote::manager::RemoteConnectionManager;
 use crate::web::event_bridge::{emit_event, EventEmitter};
 
 pub const TEST_PROGRESS_EVENT: &str = "connection://test_progress";
@@ -57,6 +59,7 @@ pub async fn run_test(
     config: &ConnectionConfig,
     emitter: &EventEmitter,
     test_id: &str,
+    rcm: Option<&RemoteConnectionManager>,
 ) -> Vec<StageResult> {
     let mut results: Vec<StageResult> = Vec::with_capacity(6);
 
@@ -227,19 +230,95 @@ pub async fn run_test(
         message,
     );
 
-    // Stage 6: daemon probe — placeholder for CG-002.4.
+    // Stage 6: daemon probe — drives the real bootstrap pipeline (probe →
+    // deploy → launch → tunnel → handshake → live) via the connection
+    // manager, then immediately disconnects. The pipeline runs the same code
+    // as `open_connection`, so we validate it end-to-end with no separate
+    // mock path. If no manager was supplied (e.g. the standalone server
+    // mode where SSH bootstrap doesn't apply), we skip the stage.
+    let probe_result = run_daemon_probe(config, emitter, test_id, rcm).await;
+    let (status, message, elapsed) = probe_result;
     record(
         &mut results,
         emitter,
         config,
         test_id,
         TestStage::DaemonProbe,
-        StageStatus::Skipped,
-        0,
-        Some("deferred to CG-002.4".to_string()),
+        status,
+        elapsed,
+        message,
     );
 
     results
+}
+
+async fn run_daemon_probe(
+    config: &ConnectionConfig,
+    emitter: &EventEmitter,
+    test_id: &str,
+    rcm: Option<&RemoteConnectionManager>,
+) -> (StageStatus, Option<String>, u64) {
+    let Some(rcm) = rcm else {
+        return (
+            StageStatus::Skipped,
+            Some("connection manager unavailable in this build mode".into()),
+            0,
+        );
+    };
+    emit_running(emitter, config, test_id, TestStage::DaemonProbe);
+    let started = Instant::now();
+
+    // Kick off the connect; this is fire-and-forget at the channel level.
+    if let Err(e) = rcm.connect(config.clone()).await {
+        return (
+            StageStatus::Failure,
+            Some(format!("failed to start bootstrap: {e}")),
+            started.elapsed().as_millis() as u64,
+        );
+    }
+
+    // Poll the runtime state until it settles into Live or Error, with a 90s
+    // ceiling that comfortably spans first-time deploys (~remote curl + tar).
+    const POLL_INTERVAL: Duration = Duration::from_millis(250);
+    const PROBE_TIMEOUT: Duration = Duration::from_secs(90);
+    let outcome: (StageStatus, Option<String>) = loop {
+        if started.elapsed() > PROBE_TIMEOUT {
+            break (
+                StageStatus::Failure,
+                Some("daemon probe timed out (90s)".into()),
+            );
+        }
+        match rcm.current_runtime(&config.id).await {
+            Some(rt) => match rt.status {
+                ConnectionStatus::Live => break (StageStatus::Success, None),
+                ConnectionStatus::Error => {
+                    break (
+                        StageStatus::Failure,
+                        rt.last_error
+                            .clone()
+                            .or_else(|| Some("daemon probe failed".into())),
+                    )
+                }
+                ConnectionStatus::AwaitingManual => {
+                    break (
+                        StageStatus::Failure,
+                        Some(
+                            "daemon binary not present; manual deployment required".into(),
+                        ),
+                    )
+                }
+                _ => {}
+            },
+            None => break (StageStatus::Failure, Some("connection task not found".into())),
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    };
+
+    // Always release the bootstrap once the test is over — this is just a
+    // probe, the real lifetime is owned by `open_connection`.
+    let _ = rcm.disconnect(&config.id).await;
+
+    (outcome.0, outcome.1, started.elapsed().as_millis() as u64)
 }
 
 /// Build the common SSH args list (everything before the remote command).

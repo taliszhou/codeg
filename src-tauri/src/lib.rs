@@ -42,6 +42,7 @@ mod tauri_app {
         terminal as terminal_commands, version_control, windows,
         workspace_state as workspace_state_commands,
     };
+    use crate::remote::RemoteConnectionManager;
     use crate::terminal::manager::TerminalManager;
     use crate::{db, network, process, web};
     use tauri::Manager;
@@ -110,6 +111,7 @@ mod tauri_app {
             .manage(ConnectionManager::new())
             .manage(TerminalManager::new())
             .manage(ChatChannelManager::new())
+            .manage(RemoteConnectionManager::new())
             .manage(windows::SettingsWindowState::new())
             .manage(windows::CommitWindowState::new())
             .manage(windows::MergeWindowState::new())
@@ -185,6 +187,18 @@ mod tauri_app {
                     let emitter = web::event_bridge::EventEmitter::Tauri(app.handle().clone());
                     tauri::async_runtime::spawn(async move {
                         ccm_ref.start_background(br, db_conn, cm, emitter).await;
+                    });
+                }
+
+                // Hand the live AppHandle to the RemoteConnectionManager so any
+                // SSH-driven status events reach both the webview and the
+                // WebSocket subscribers, then warm up the daemon manifest.
+                {
+                    let rcm = app.state::<RemoteConnectionManager>().clone_ref();
+                    let emitter = web::event_bridge::EventEmitter::Tauri(app.handle().clone());
+                    tauri::async_runtime::spawn(async move {
+                        rcm.set_emitter(emitter).await;
+                        rcm.warm_up().await;
                     });
                 }
 
@@ -506,6 +520,11 @@ mod tauri_app {
                 connections_commands::delete_connection,
                 connections_commands::list_ssh_config_aliases,
                 connections_commands::test_connection,
+                connections_commands::open_connection,
+                connections_commands::close_connection,
+                connections_commands::resume_connection_after_manual,
+                connections_commands::hard_reset_connection,
+                connections_commands::get_connection_runtime,
                 model_provider_commands::list_model_providers,
                 model_provider_commands::create_model_provider,
                 model_provider_commands::update_model_provider,
@@ -529,6 +548,9 @@ mod tauri_app {
                     }
                     if let Some(cm) = app.try_state::<ConnectionManager>() {
                         tauri::async_runtime::block_on(cm.disconnect_all());
+                    }
+                    if let Some(rcm) = app.try_state::<RemoteConnectionManager>() {
+                        tauri::async_runtime::block_on(rcm.disconnect_all());
                     }
                 }
             });
