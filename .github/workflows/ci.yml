@@ -56,6 +56,10 @@ jobs:
         working-directory: src-tauri
         run: cargo test --lib --no-default-features
 
+      - name: cargo test (server bin, no default features)
+        working-directory: src-tauri
+        run: cargo test --bin codeg-server --no-default-features
+
   daemon-musl-smoke:
     name: Daemon musl smoke build
     runs-on: ubuntu-22.04
@@ -93,8 +97,81 @@ jobs:
           echo "Musl binary is statically linked: OK"
           "${BIN}" --version
 
-      # NOTE: Daemon spawn smoke test (--listen + --bootstrap-stdio handshake)
-      # will be added in CG-002.3 once those flags are implemented.
+      - name: Daemon spawn smoke test
+        shell: bash
+        run: |
+          BIN=src-tauri/target/x86_64-unknown-linux-musl/release/codeg-server
+          chmod +x "${BIN}"
+          export CODEG_DATA_DIR="$(mktemp -d)"
+
+          # Hold stdin open via tail -f /dev/null so the watchdog does not
+          # see EOF before we have a chance to probe the HTTP listener.
+          tail -f /dev/null | "${BIN}" --listen 127.0.0.1:0 --bootstrap-stdio \
+            > daemon.stdout 2> daemon.stderr &
+          PIPE_PID=$!
+
+          # Wait for the bootstrap line (up to 15 seconds: db migrations
+          # may take a few seconds on a cold runner).
+          for i in $(seq 1 30); do
+            if [[ -s daemon.stdout ]] && head -n 1 daemon.stdout | grep -q '"port"'; then
+              break
+            fi
+            sleep 0.5
+            if ! kill -0 ${PIPE_PID} 2>/dev/null; then
+              echo "daemon died early; stderr:"
+              cat daemon.stderr
+              exit 1
+            fi
+          done
+
+          BOOTSTRAP=$(head -n 1 daemon.stdout)
+          echo "Bootstrap: ${BOOTSTRAP}"
+          PORT=$(echo "${BOOTSTRAP}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["port"])')
+          TOKEN=$(echo "${BOOTSTRAP}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+          SCHEMA=$(echo "${BOOTSTRAP}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["schema_version"])')
+
+          if [[ "${SCHEMA}" != "v3" ]]; then
+            echo "FAIL: unexpected schema_version: ${SCHEMA}"
+            kill ${PIPE_PID} || true
+            exit 1
+          fi
+
+          # Authenticated probe — expect 200 from POST /api/health.
+          HTTP_STATUS=$(curl -s -X POST -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            "http://127.0.0.1:${PORT}/api/health")
+          if [[ "${HTTP_STATUS}" != "200" ]]; then
+            echo "FAIL: health check returned HTTP ${HTTP_STATUS}"
+            cat daemon.stderr
+            kill ${PIPE_PID} || true
+            exit 1
+          fi
+
+          # Token MUST NOT leak to stderr.
+          if grep -q "${TOKEN}" daemon.stderr; then
+            echo "FAIL: token leaked to stderr"
+            kill ${PIPE_PID} || true
+            exit 1
+          fi
+
+          # Closing the parent pipeline triggers stdin EOF in the daemon,
+          # which must complete graceful shutdown within 5 seconds.
+          kill -TERM ${PIPE_PID} || true
+          DAEMON_PID=$(pgrep -f "codeg-server --listen 127.0.0.1:0" || true)
+          if [[ -n "${DAEMON_PID}" ]]; then
+            for i in $(seq 1 10); do
+              if ! kill -0 "${DAEMON_PID}" 2>/dev/null; then
+                break
+              fi
+              sleep 0.5
+            done
+            if kill -0 "${DAEMON_PID}" 2>/dev/null; then
+              echo "FAIL: daemon did not exit after stdin EOF"
+              kill -9 "${DAEMON_PID}" || true
+              exit 1
+            fi
+          fi
+          echo "Daemon spawn smoke test PASSED"
 
   frontend-check:
     name: Frontend (lint + build)

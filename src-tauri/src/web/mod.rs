@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod bootstrap;
 pub mod event_bridge;
 pub mod handlers;
 pub mod port_probe;
