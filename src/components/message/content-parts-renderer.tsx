@@ -37,6 +37,7 @@ import {
   ReasoningContent,
 } from "@/components/ai-elements/reasoning"
 import { AgentToolCallPart } from "./agent-tool-call"
+import { GenericAgentTextRenderer } from "./generic-agent-text-renderer"
 import {
   FileTextIcon,
   FilePenLineIcon,
@@ -2510,16 +2511,27 @@ const ToolGroupPart = memo(function ToolGroupPart({
 interface ContentPartsRendererProps {
   parts: AdaptedContentPart[]
   role?: MessageRole
+  agentType?: import("@/lib/types").AgentType
 }
 
 export const ContentPartsRenderer = memo(function ContentPartsRenderer({
   parts,
   role,
+  agentType,
 }: ContentPartsRendererProps) {
   return (
     <div className="space-y-4">
       {parts.map((part, i) => {
         if (part.type === "text") {
+          if (
+            agentType === "generic_agent" &&
+            role !== "user" &&
+            part.text.includes("LLM Running (Turn")
+          ) {
+            return (
+              <GenericAgentTextRenderer key={`ga-text-${i}`} text={part.text} />
+            )
+          }
           return (
             <TextPart
               key={`text-${i}`}

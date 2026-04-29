@@ -1753,7 +1753,9 @@
         "tokenCacheRead": "キャッシュ読取",
         "tokenCacheWrite": "キャッシュ書込",
         "duration": "所要時間",
-        "jumpToPreviousUserMessage": "前のユーザーメッセージへ"
+        "jumpToPreviousUserMessage": "前のユーザーメッセージへ",
+        "turnLabel": "ターン {number}",
+        "toolCallCount": "{count} ツール呼び出し"
       },
       "liveTurnStats": {
         "thinking": "考え中...",

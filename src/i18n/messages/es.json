@@ -1753,7 +1753,9 @@
         "tokenCacheRead": "Lectura de caché",
         "tokenCacheWrite": "Escritura de caché",
         "duration": "Duración",
-        "jumpToPreviousUserMessage": "Ir al mensaje del usuario"
+        "jumpToPreviousUserMessage": "Ir al mensaje del usuario",
+        "turnLabel": "Turno {number}",
+        "toolCallCount": "{count} llamadas"
       },
       "liveTurnStats": {
         "thinking": "Pensando...",

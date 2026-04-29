@@ -1753,7 +1753,9 @@
         "tokenCacheRead": "Cache read",
         "tokenCacheWrite": "Cache write",
         "duration": "Duration",
-        "jumpToPreviousUserMessage": "Jump to user message"
+        "jumpToPreviousUserMessage": "Jump to user message",
+        "turnLabel": "Turn {number}",
+        "toolCallCount": "{count} tool calls"
       },
       "liveTurnStats": {
         "thinking": "Thinking...",

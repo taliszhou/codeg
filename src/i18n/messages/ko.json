@@ -1753,7 +1753,9 @@
         "tokenCacheRead": "캐시 읽기",
         "tokenCacheWrite": "캐시 쓰기",
         "duration": "소요 시간",
-        "jumpToPreviousUserMessage": "이전 사용자 메시지로 이동"
+        "jumpToPreviousUserMessage": "이전 사용자 메시지로 이동",
+        "turnLabel": "턴 {number}",
+        "toolCallCount": "{count}개 도구 호출"
       },
       "liveTurnStats": {
         "thinking": "생각 중...",

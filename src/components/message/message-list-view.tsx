@@ -315,12 +315,14 @@ const HistoricalMessageGroup = memo(function HistoricalMessageGroup({
   showStats = true,
   previousUserIndex = null,
   isResponseComplete = true,
+  agentType,
 }: {
   group: ResolvedMessageGroup
   dimmed?: boolean
   showStats?: boolean
   previousUserIndex?: number | null
   isResponseComplete?: boolean
+  agentType?: import("@/lib/types").AgentType
 }) {
   if (group.role === "system") {
     return <CollapsibleSystemMessage group={group} />
@@ -347,7 +349,11 @@ const HistoricalMessageGroup = memo(function HistoricalMessageGroup({
           </div>
         ) : (
           <MessageContent>
-            <ContentPartsRenderer parts={group.parts} role={group.role} />
+            <ContentPartsRenderer
+              parts={group.parts}
+              role={group.role}
+              agentType={agentType}
+            />
           </MessageContent>
         )}
         {group.role === "user" && group.resources.length > 0 ? (
@@ -587,28 +593,32 @@ export function MessageListView({
     [historicalPlanEntries]
   )
 
-  const renderThreadItem = useCallback((item: ThreadRenderItem) => {
-    switch (item.kind) {
-      case "turn": {
-        const pt = item.isRoleTransition ? 16 : 0
-        return (
-          <div style={pt > 0 ? { paddingTop: pt } : undefined}>
-            <HistoricalMessageGroup
-              group={item.group}
-              dimmed={item.phase === "optimistic"}
-              showStats={item.showStats}
-              previousUserIndex={item.previousUserIndex}
-              isResponseComplete={item.phase === "persisted"}
-            />
-          </div>
-        )
+  const renderThreadItem = useCallback(
+    (item: ThreadRenderItem) => {
+      switch (item.kind) {
+        case "turn": {
+          const pt = item.isRoleTransition ? 16 : 0
+          return (
+            <div style={pt > 0 ? { paddingTop: pt } : undefined}>
+              <HistoricalMessageGroup
+                group={item.group}
+                dimmed={item.phase === "optimistic"}
+                showStats={item.showStats}
+                previousUserIndex={item.previousUserIndex}
+                isResponseComplete={item.phase === "persisted"}
+                agentType={agentType}
+              />
+            </div>
+          )
+        }
+        case "typing":
+          return <PendingTypingIndicator />
+        default:
+          return null
       }
-      case "typing":
-        return <PendingTypingIndicator />
-      default:
-        return null
-    }
-  }, [])
+    },
+    [agentType]
+  )
 
   const emptyState = useMemo(
     () =>
