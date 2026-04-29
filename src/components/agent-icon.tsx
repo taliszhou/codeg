@@ -78,12 +78,29 @@ const ClaudeCodeColorIcon = memo(function ClaudeCodeColorIcon({
   )
 })
 
+const GenericAgentIcon = memo(function GenericAgentIcon({
+  size = "1em",
+}: {
+  size?: string | number
+}) {
+  return (
+    <img
+      src="/generic-agent.jpg"
+      alt="GenericAgent"
+      width={size}
+      height={size}
+      style={{ flex: "none", lineHeight: 1, borderRadius: "20%" }}
+    />
+  )
+})
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyIcon = React.ComponentType<any>
 
 const COLOR_ICONS: Partial<Record<AgentType, AnyIcon>> = {
   claude_code: ClaudeCodeColorIcon,
   codex: CodexColorIcon,
+  generic_agent: GenericAgentIcon,
   gemini: GeminiCLI.Color,
   open_claw: OpenClaw.Color,
 }
