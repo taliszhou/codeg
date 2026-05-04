@@ -316,6 +316,7 @@ const HistoricalMessageGroup = memo(function HistoricalMessageGroup({
   previousUserIndex = null,
   isResponseComplete = true,
   agentType,
+  isStreaming = false,
 }: {
   group: ResolvedMessageGroup
   dimmed?: boolean
@@ -323,6 +324,7 @@ const HistoricalMessageGroup = memo(function HistoricalMessageGroup({
   previousUserIndex?: number | null
   isResponseComplete?: boolean
   agentType?: import("@/lib/types").AgentType
+  isStreaming?: boolean
 }) {
   if (group.role === "system") {
     return <CollapsibleSystemMessage group={group} />
@@ -353,6 +355,7 @@ const HistoricalMessageGroup = memo(function HistoricalMessageGroup({
               parts={group.parts}
               role={group.role}
               agentType={agentType}
+              isStreaming={isStreaming}
             />
           </MessageContent>
         )}
@@ -607,6 +610,7 @@ export function MessageListView({
                 previousUserIndex={item.previousUserIndex}
                 isResponseComplete={item.phase === "persisted"}
                 agentType={agentType}
+                isStreaming={item.phase === "streaming"}
               />
             </div>
           )
