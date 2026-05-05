@@ -404,13 +404,8 @@ const ConversationTabView = memo(function ConversationTabView({
         effectiveConversationId
       )
     }
-  }, [
-    completeTurn,
-    connStatus,
-    conn.liveMessage,
-    effectiveConversationId,
-    syncTurnMetadata,
-  ])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- conn.liveMessage intentionally excluded: read current value at connStatus transition, don't re-run on every streaming delta
+  }, [completeTurn, connStatus, effectiveConversationId, syncTurnMetadata])
 
   // Auto-send queued messages when agent finishes responding.
   // Refs are synced via useEffect; the auto-send effect is declared
