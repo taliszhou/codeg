@@ -659,6 +659,8 @@ function reducer(
           ).turns
         : []
 
+      console.log("[ACP][FE][COMPLETE_TURN] streamingTurns count=", streamingTurns.length, "texts=", streamingTurns.map(t => t.content?.slice(-80)))
+
       // Promote: optimisticTurns + streamingTurns → localTurns
       const promoted = [...current.localTurns, ...current.optimisticTurns]
       promoted.push(...streamingTurns)
@@ -708,6 +710,7 @@ function reducer(
           (session.detail?.turns.length ?? 0) > 0 ||
           session.localTurns.length > 0
         if (hasExistingTurns || session.detailLoading || session.syncState === "idle") {
+          console.log("[ACP][FE][SET_LIVE_MESSAGE] BLOCKED by guard, convId=", action.conversationId, "syncState=", session.syncState, "hasExistingTurns=", hasExistingTurns, "detailLoading=", session.detailLoading, "isLive=", action.isLive)
           return state
         }
       }
