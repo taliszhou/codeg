@@ -674,7 +674,7 @@ function reducer(
           ).turns
         : []
 
-      console.log("[ACP][FE][COMPLETE_TURN] streamingTurns count=", streamingTurns.length, "texts=", streamingTurns.map(t => t.content?.slice(-80)))
+      console.log("[ACP][FE][COMPLETE_TURN] streamingTurns count=", streamingTurns.length)
 
       // Promote: optimisticTurns + streamingTurns → localTurns
       const promoted = [...current.localTurns, ...current.optimisticTurns]
