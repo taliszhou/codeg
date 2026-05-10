@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import "katex/dist/katex.min.css"
 import "./globals.css"
-import { JetBrains_Mono } from "next/font/google"
+import localFont from "next/font/local"
 import { NextIntlClientProvider } from "next-intl"
 import { AppI18nProvider } from "@/components/i18n-provider"
 import { getMessagesForLocale } from "@/i18n/messages"
@@ -12,8 +12,12 @@ import { APPEARANCE_INIT_SCRIPT } from "@/lib/appearance-script"
 import { AppearanceProvider } from "@/components/appearance-provider"
 import { OverlayScrollbarsInit } from "@/components/overlay-scrollbars-init"
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
+const jetbrainsMono = localFont({
+  src: [
+    { path: "../fonts/JetBrainsMono-Regular.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/JetBrainsMono-Italic.woff2", weight: "400", style: "italic" },
+    { path: "../fonts/JetBrainsMono-Bold.woff2", weight: "700", style: "normal" },
+  ],
   variable: "--font-sans",
 })
 
