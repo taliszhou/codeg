@@ -119,7 +119,8 @@ async fn handle_acp_event_payload(
 
                 if let Some(prompt_text) = session.pending_prompt.take() {
                     let blocks = vec![PromptInputBlock::Text { text: prompt_text }];
-                    if let Err(e) = conn_mgr.send_prompt(connection_id, blocks).await {
+                    let source = format!("chat:{}:{}", session.channel_id, session.sender_id);
+                    if let Err(e) = conn_mgr.send_prompt(connection_id, blocks, &source).await {
                         eprintln!("[SessionEventSub] failed to send pending prompt: {e}");
                         let channel_id = session.channel_id;
                         let msg = RichMessage::error(format!("Failed to send task: {e}"));
@@ -129,11 +130,64 @@ async fn handle_acp_event_payload(
             }
         }
 
+        "user_prompt_sent" => {
+            // Echo a user-authored prompt to the bound chat channel iff the
+            // bridge has a session for this connection AND the prompt did
+            // not originate from that same (channel_id, sender_id) — the
+            // user already saw their own message in their own chat
+            // (Telegram / WeChat / Lark / etc.). The `chat:` prefix is
+            // channel-agnostic; only the (cid, sid) pair matters for dedup.
+            let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
+            let source = payload
+                .get("source")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if text.is_empty() {
+                return;
+            }
+
+            let target: Option<i32> = {
+                let guard = bridge.lock().await;
+                guard.get(connection_id).and_then(|session| {
+                    let self_source =
+                        format!("chat:{}:{}", session.channel_id, session.sender_id);
+                    if source == self_source {
+                        None
+                    } else {
+                        Some(session.channel_id)
+                    }
+                })
+            };
+
+            if let Some(channel_id) = target {
+                // Long user prompts get split into Telegram-sized chunks
+                // rather than hard-truncated; the originating side already
+                // has the full text but the receiving channel should see
+                // it in full too. Only the first chunk carries the "User"
+                // title; the rest are bare continuations.
+                let chunks = split_into_chunks(text, MAX_MESSAGE_LEN);
+                for (idx, chunk) in chunks.into_iter().enumerate() {
+                    let mut msg = RichMessage::info(chunk);
+                    if idx == 0 {
+                        msg = msg.with_title("User");
+                    }
+                    let _ = manager.send_to_channel(channel_id, &msg).await;
+                }
+            }
+        }
+
         "content_delta" => {
             let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
 
-            // Collect flush info under the lock, then release before any IO.
-            let flush_info: Option<(i32, String, Option<String>)> = {
+            // Drain at most `MAX_MESSAGE_LEN` chars from the front of the
+            // buffer when (a) accumulated bytes ≥ BUFFER_FLUSH_THRESHOLD and
+            // (b) at least 2s have passed since the last flush. The
+            // per-flush size cap keeps every emitted message inside
+            // Telegram's 4096-char/message ceiling without ever needing to
+            // chunk a single drain. Any residual stays in the buffer and
+            // gets drained by subsequent content_delta flushes (still 2s
+            // apart), the 10s heartbeat, or finally `turn_complete`.
+            let chunk: Option<(i32, String)> = {
                 let mut guard = bridge.lock().await;
                 match guard.get_mut(connection_id) {
                     Some(session) => {
@@ -142,11 +196,9 @@ async fn handle_acp_event_payload(
                             && session.last_flushed.elapsed() >= Duration::from_secs(2)
                         {
                             session.last_flushed = Instant::now();
-                            Some((
-                                session.channel_id,
-                                session.agent_type.to_string(),
-                                session.tool_calls.last().cloned(),
-                            ))
+                            let drained =
+                                take_chunk_front(&mut session.content_buffer, MAX_MESSAGE_LEN);
+                            Some((session.channel_id, drained))
                         } else {
                             None
                         }
@@ -155,13 +207,8 @@ async fn handle_acp_event_payload(
                 }
             };
 
-            if let Some((channel_id, agent_label, last_tool)) = flush_info {
-                let lang = get_lang(db).await;
-                let mut status = super::i18n::agent_responding(lang, &agent_label);
-                if let Some(tool) = last_tool {
-                    status.push_str(&format!(" | {tool}"));
-                }
-                let msg = RichMessage::info(status);
+            if let Some((channel_id, body)) = chunk {
+                let msg = RichMessage::info(body);
                 let _ = manager.send_to_channel(channel_id, &msg).await;
             }
         }
@@ -327,16 +374,30 @@ async fn handle_acp_event_payload(
             if let Some(session) = guard.get_mut(connection_id) {
                 let channel_id = session.channel_id;
                 let conv_id = session.conversation_id;
-                let content = std::mem::take(&mut session.content_buffer);
+                let residual = std::mem::take(&mut session.content_buffer);
                 let tool_count = session.tool_calls.len();
                 session.tool_calls.clear();
                 session.last_flushed = Instant::now();
                 drop(guard);
 
-                let lang = get_lang(db).await;
-                let body = format_completion(&content, tool_count, lang);
+                // Emit any sub-threshold tail content first, split into one
+                // or more Telegram-sized chunks. Streaming has already shipped
+                // anything that crossed the per-flush threshold, so this is
+                // strictly the unsent remainder.
+                for chunk in split_into_chunks(&residual, MAX_MESSAGE_LEN) {
+                    let msg = RichMessage::info(chunk);
+                    let _ = manager.send_to_channel(channel_id, &msg).await;
+                }
 
-                let msg = RichMessage::info(body)
+                // Then a compact completion footer carrying the metadata
+                // fields. Kept short so it never collides with the 4096-char
+                // cap regardless of how the agent finished.
+                let lang = get_lang(db).await;
+                let footer_body = match lang {
+                    Lang::ZhCn | Lang::ZhTw => format!("✓ 完成 ({tool_count} 次工具调用)"),
+                    _ => format!("✓ Done ({tool_count} tool calls)"),
+                };
+                let footer = RichMessage::info(footer_body)
                     .with_title(match lang {
                         Lang::ZhCn | Lang::ZhTw => "任务完成",
                         _ => "Turn Complete",
@@ -349,8 +410,7 @@ async fn handle_acp_event_payload(
                         },
                         localize_stop_reason(stop_reason, lang),
                     );
-
-                let _ = manager.send_to_channel(channel_id, &msg).await;
+                let _ = manager.send_to_channel(channel_id, &footer).await;
 
                 if stop_reason == "end_turn" {
                     let _ = conversation_service::update_status(
@@ -424,9 +484,15 @@ async fn handle_acp_event_payload(
 async fn flush_progress(
     bridge: &Arc<Mutex<SessionBridge>>,
     manager: &ChatChannelManager,
-    db: &DatabaseConnection,
+    _db: &DatabaseConnection,
 ) {
-    let lang = get_lang(db).await;
+    // Heartbeat: drain at most `MAX_MESSAGE_LEN` chars of residual content
+    // for any session whose buffer has been sitting idle for >=10s. Empty
+    // buffers are skipped — we don't broadcast bare "still working"
+    // indicators (they spam the chat and burn Telegram's 1 msg/s/chat
+    // budget for no information value). Anything beyond the per-message
+    // cap stays in the buffer for the next heartbeat / streaming flush /
+    // turn_complete.
     let updates: Vec<(i32, String)> = {
         let mut guard = bridge.lock().await;
         let mut out = Vec::new();
@@ -435,75 +501,16 @@ async fn flush_progress(
                 && session.last_flushed.elapsed() >= Duration::from_secs(FLUSH_INTERVAL_SECS)
             {
                 session.last_flushed = Instant::now();
-                let last_tool = session.tool_calls.last().cloned();
-                let agent_label = session.agent_type.to_string();
-                let mut status = super::i18n::agent_responding(lang, &agent_label);
-                if let Some(tool) = last_tool {
-                    status.push_str(&format!(" | {tool}"));
-                }
-                out.push((session.channel_id, status));
+                let drained = take_chunk_front(&mut session.content_buffer, MAX_MESSAGE_LEN);
+                out.push((session.channel_id, drained));
             }
         }
         out
     };
 
-    for (channel_id, text) in updates {
-        let msg = RichMessage::info(text);
+    for (channel_id, body) in updates {
+        let msg = RichMessage::info(body);
         let _ = manager.send_to_channel(channel_id, &msg).await;
-    }
-}
-
-fn format_completion(content: &str, tool_count: usize, lang: Lang) -> String {
-    if content.is_empty() {
-        return match lang {
-            Lang::ZhCn | Lang::ZhTw => format!("(无文本输出, {tool_count} 次工具调用)"),
-            _ => format!("(No text output, {tool_count} tool calls)"),
-        };
-    }
-
-    if content.len() <= MAX_MESSAGE_LEN {
-        let mut body = content.to_string();
-        if tool_count > 0 {
-            body.push_str(&format!(
-                "\n\n[{} {}]",
-                tool_count,
-                match lang {
-                    Lang::ZhCn | Lang::ZhTw => "次工具调用",
-                    _ => "tool calls",
-                }
-            ));
-        }
-        return body;
-    }
-
-    // Truncate long content (use char boundaries to avoid panic on multi-byte)
-    let head_end = content
-        .char_indices()
-        .nth(500)
-        .map(|(i, _)| i)
-        .unwrap_or(content.len());
-    let head = &content[..head_end];
-    let tail_start = content
-        .char_indices()
-        .rev()
-        .nth(499)
-        .map(|(i, _)| i)
-        .unwrap_or(0);
-    let tail = &content[tail_start..];
-
-    match lang {
-        Lang::ZhCn | Lang::ZhTw => {
-            format!(
-                "{head}\n\n...\n\n{tail}\n\n[完整回复: {} 字符, {tool_count} 次工具调用]",
-                content.len()
-            )
-        }
-        _ => {
-            format!(
-                "{head}\n\n...\n\n{tail}\n\n[Full response: {} chars, {tool_count} tool calls]",
-                content.len()
-            )
-        }
     }
 }
 
@@ -596,6 +603,80 @@ fn localize_stop_reason(reason: &str, lang: Lang) -> String {
         },
     }
     .to_string()
+}
+
+/// Remove and return up to `max_chars` Unicode chars from the front of `buf`.
+/// Char-boundary safe (never splits a multi-byte UTF-8 codepoint). Used to
+/// drain at most one Telegram-message-worth of streaming content per flush
+/// while leaving any tail in the buffer for the next flush.
+fn take_chunk_front(buf: &mut String, max_chars: usize) -> String {
+    let mut split_byte = buf.len();
+    let mut count = 0usize;
+    for (i, _) in buf.char_indices() {
+        if count >= max_chars {
+            split_byte = i;
+            break;
+        }
+        count += 1;
+    }
+    if split_byte >= buf.len() {
+        return std::mem::take(buf);
+    }
+    let tail = buf.split_off(split_byte);
+    std::mem::replace(buf, tail)
+}
+
+/// Split `text` into chunks of at most `max_chars` Unicode chars, preferring
+/// line boundaries when packing. Lines longer than `max_chars` are hard-split
+/// at char boundaries. Empty input returns an empty Vec.
+fn split_into_chunks(text: &str, max_chars: usize) -> Vec<String> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+    if text.chars().count() <= max_chars {
+        return vec![text.to_string()];
+    }
+
+    let mut out: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut current_chars = 0usize;
+
+    for line in text.split_inclusive('\n') {
+        let line_chars = line.chars().count();
+        if line_chars > max_chars {
+            if !current.is_empty() {
+                out.push(std::mem::take(&mut current));
+                current_chars = 0;
+            }
+            // Hard-split a line that's longer than the per-message budget.
+            let mut remaining = line;
+            while !remaining.is_empty() {
+                let mut split_byte = remaining.len();
+                let mut count = 0usize;
+                for (i, _) in remaining.char_indices() {
+                    if count >= max_chars {
+                        split_byte = i;
+                        break;
+                    }
+                    count += 1;
+                }
+                let (head, tail) = remaining.split_at(split_byte);
+                out.push(head.to_string());
+                remaining = tail;
+            }
+        } else if current_chars + line_chars > max_chars {
+            out.push(std::mem::take(&mut current));
+            current.push_str(line);
+            current_chars = line_chars;
+        } else {
+            current.push_str(line);
+            current_chars += line_chars;
+        }
+    }
+    if !current.is_empty() {
+        out.push(current);
+    }
+    out
 }
 
 /// Extract a concise detail string from a tool call's `raw_input` JSON.

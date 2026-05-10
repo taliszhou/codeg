@@ -384,7 +384,8 @@ impl SessionState {
             }
             AcpEvent::ClaudeSdkMessage { .. }
             | AcpEvent::Error { .. }
-            | AcpEvent::SessionLoadFailed { .. } => {
+            | AcpEvent::SessionLoadFailed { .. }
+            | AcpEvent::UserPromptSent { .. } => {
                 // 这些事件不直接修改 SessionState 的可见字段。
             }
         }

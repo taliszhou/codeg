@@ -506,6 +506,24 @@ export type AcpEvent =
       used: number
       size: number
     }
+  | {
+      /**
+       * Echo of a user-authored prompt that was just dispatched on this
+       * connection. Emitted from the backend prompt entry point so all
+       * subscribers (Web tabs, chat-channel bridges) can render the user's
+       * text in their own view. `source` identifies the originator so each
+       * subscriber can drop events for prompts they themselves sent.
+       *
+       * Format:
+       *   - `"web"` — sent from the Web/Tauri UI
+       *   - `"chat:{channel_id}:{sender_id}"` — sent from a chat channel
+       *     (Telegram, WeChat, Lark, …); prefix is channel-agnostic and
+       *     only the (channel_id, sender_id) pair is significant.
+       */
+      type: "user_prompt_sent"
+      text: string
+      source: string
+    }
 
 /**
  * Wire envelope for all ACP events. JSON shape is flat via Rust's serde

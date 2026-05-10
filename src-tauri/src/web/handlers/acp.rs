@@ -183,6 +183,7 @@ pub async fn acp_prompt(
             params.blocks,
             params.folder_id,
             params.conversation_id,
+            "web",
         )
         .await
         .map_err(|e| AppCommandError::task_execution_failed(e.to_string()))?;

@@ -171,6 +171,16 @@ pub enum AcpEvent {
     },
     /// Session usage/context window updated during conversation
     UsageUpdate { used: u64, size: u64 },
+    /// A user-authored prompt has been dispatched to the agent on this connection.
+    /// Emitted from the prompt entry point so subscribers (other Web tabs,
+    /// chat-channel bridges) can render the user's text in their own view
+    /// without pulling it out of band. `source` identifies the originator so
+    /// each subscriber can de-duplicate against its own dispatches:
+    ///   - `"web"` — sent from the Web/Tauri UI
+    ///   - `"chat:{channel_id}:{sender_id}"` — sent from a chat channel
+    ///     (Telegram, WeChat, Lark, …); the prefix is channel-agnostic and
+    ///     only the (channel_id, sender_id) pair is significant.
+    UserPromptSent { text: String, source: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

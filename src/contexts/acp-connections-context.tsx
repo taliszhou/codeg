@@ -2326,6 +2326,13 @@ export function AcpConnectionsProvider({ children }: { children: ReactNode }) {
             },
           })
           break
+        case "user_prompt_sent":
+          // Self-source ("web") is already rendered as an optimistic turn by
+          // the sender's tab; ignore here. Cross-source events (e.g. a
+          // Telegram user typing into the same conversation) are picked up
+          // by `useAcpEvent` consumers — see ConversationTabView, which
+          // injects them as user turns into the timeline.
+          break
       }
     },
     [

@@ -370,18 +370,50 @@ impl ConnectionManager {
         &self,
         conn_id: &str,
         blocks: Vec<PromptInputBlock>,
+        source: &str,
     ) -> Result<(), AcpError> {
-        let cmd_tx = {
+        // Snapshot text for the echo event before `blocks` is moved into the
+        // command. `source.is_empty()` opts out (used by code paths that
+        // shouldn't surface a user-message echo, e.g. internal re-sends).
+        let echo_text: Option<String> = if source.is_empty() {
+            None
+        } else {
+            let mut buf = String::new();
+            for b in &blocks {
+                if let PromptInputBlock::Text { text } = b {
+                    if !buf.is_empty() {
+                        buf.push('\n');
+                    }
+                    buf.push_str(text);
+                }
+            }
+            (!buf.is_empty()).then_some(buf)
+        };
+
+        let (cmd_tx, state_arc, emitter) = {
             let connections = self.connections.lock().await;
             let conn = connections
                 .get(conn_id)
                 .ok_or_else(|| AcpError::ConnectionNotFound(conn_id.into()))?;
-            conn.cmd_tx.clone()
+            (conn.cmd_tx.clone(), conn.state.clone(), conn.emitter.clone())
         };
         cmd_tx
             .send(ConnectionCommand::Prompt { blocks })
             .await
-            .map_err(|_| AcpError::ProcessExited)
+            .map_err(|_| AcpError::ProcessExited)?;
+
+        if let Some(text) = echo_text {
+            emit_with_state(
+                &state_arc,
+                &emitter,
+                AcpEvent::UserPromptSent {
+                    text,
+                    source: source.to_string(),
+                },
+            )
+            .await;
+        }
+        Ok(())
     }
 
     /// Clone the connection's `prompt_lock` under a short connections-map lock.
@@ -402,10 +434,11 @@ impl ConnectionManager {
         &self,
         conn_id: &str,
         blocks: Vec<PromptInputBlock>,
+        source: &str,
     ) -> Result<(), AcpError> {
         let prompt_lock = self.clone_prompt_lock(conn_id).await?;
         let _guard = prompt_lock.lock_owned().await;
-        self.send_prompt_inner(conn_id, blocks).await
+        self.send_prompt_inner(conn_id, blocks, source).await
     }
 
     /// Send a prompt while ensuring a `Conversation` DB row is bound to this
@@ -428,6 +461,7 @@ impl ConnectionManager {
         blocks: Vec<PromptInputBlock>,
         folder_id: Option<i32>,
         conversation_id: Option<i32>,
+        source: &str,
     ) -> Result<(), AcpError> {
         // Caller-supplied conversation_id requires folder_id (we include it in
         // the emitted ConversationLinked event so subscribers don't have to
@@ -575,7 +609,7 @@ impl ConnectionManager {
         // the agent, so without this rollback the lifecycle subscriber's
         // PendingReview write also never fires — the row would be stuck
         // until a follow-up `send_prompt_linked` happened to re-flip it.
-        match self.send_prompt_inner(conn_id, blocks).await {
+        match self.send_prompt_inner(conn_id, blocks, source).await {
             Ok(()) => Ok(()),
             Err(send_err) => {
                 if let Some(cid) = conversation_id_for_status {
@@ -1107,7 +1141,7 @@ mod tests {
         // First call: creates conversation row, sets state.conversation_id.
         // The mpsc send error after linking is expected and ignored here.
         let _ = mgr
-            .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None)
+            .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None, "")
             .await;
         let snap = mgr
             .get_state(conn_id)
@@ -1125,7 +1159,7 @@ mod tests {
 
         // Second call: ignores folder_id, does NOT create another row.
         let _ = mgr
-            .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None)
+            .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None, "")
             .await;
         let snap2 = mgr
             .get_state(conn_id)
@@ -1148,7 +1182,7 @@ mod tests {
             map.insert(conn_id.into(), fake_connection(conn_id, None));
         }
         let result = mgr
-            .send_prompt_linked(&db, conn_id, vec![], None, None)
+            .send_prompt_linked(&db, conn_id, vec![], None, None, "")
             .await;
         assert!(
             result.is_err(),
@@ -1212,6 +1246,7 @@ mod tests {
                 vec![],
                 Some(folder_id),
                 Some(pre_existing.id),
+                "",
             )
             .await;
 
@@ -1254,7 +1289,7 @@ mod tests {
         .await;
 
         let err = mgr
-            .send_prompt_linked(&db, conn_id, vec![], None, Some(42))
+            .send_prompt_linked(&db, conn_id, vec![], None, Some(42), "")
             .await
             .expect_err("should reject conversation_id without folder_id");
         assert!(matches!(err, AcpError::Protocol(_)));
@@ -1300,6 +1335,7 @@ mod tests {
                 vec![],
                 Some(folder_id),
                 Some(pre.id),
+                "",
             )
             .await;
         let after = count_conversation_rows(&db).await;
@@ -1369,7 +1405,7 @@ mod tests {
         //   2. ConversationStatusChanged(InProgress)  [pre-send write]
         //   3. ConversationStatusChanged(Cancelled)   [rollback after send failure]
         let _ = mgr
-            .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None)
+            .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None, "")
             .await;
 
         let env1 = recv_first_acp_event(&mut rx).await;
@@ -1437,7 +1473,7 @@ mod tests {
             .unwrap();
 
         let _ = mgr
-            .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None)
+            .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None, "")
             .await;
 
         let env4 = recv_first_acp_event(&mut rx).await;
@@ -1795,12 +1831,12 @@ mod tests {
         tokio::join!(
             async {
                 let _ = mgr_ref
-                    .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None)
+                    .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None, "")
                     .await;
             },
             async {
                 let _ = mgr_ref
-                    .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None)
+                    .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None, "")
                     .await;
             },
         );
@@ -1923,7 +1959,7 @@ mod tests {
         .await;
 
         let result = mgr
-            .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None)
+            .send_prompt_linked(&db, conn_id, vec![], Some(folder_id), None, "")
             .await;
         assert!(
             matches!(result, Err(AcpError::ProcessExited)),
