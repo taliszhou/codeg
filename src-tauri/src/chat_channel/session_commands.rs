@@ -476,26 +476,41 @@ pub async fn handle_resume(
         }
     };
 
-    // Spawn agent with session_id for resume
-    let owner_label = format!("chat_channel:{}:{}", channel_id, sender_id);
-    let connection_id = match conn_mgr
-        .spawn_agent(
-            conv.agent_type,
-            Some(folder.path.clone()),
-            conv.external_id.clone(),
-            BTreeMap::new(),
-            owner_label,
-            emitter.clone(),
-        )
-        .await
-    {
-        Ok(id) => id,
-        Err(e) => {
-            return RichMessage::error(format!("{}{e}", i18n::failed_to_start_agent_label(lang)));
+    // Reuse a live ACP connection (e.g. one already started from the Web UI)
+    // when the conversation is currently active in-process. This makes
+    // Web ↔ Telegram share a single agent process: events emitted by the
+    // existing connection naturally flow into Telegram once we register a
+    // SessionBridge entry binding this (channel_id, sender_id).
+    let connection_id = match conn_mgr.find_connection_by_conversation_id(conv.id).await {
+        Some(existing) => existing,
+        None => {
+            // No live connection — spawn a fresh one resuming via external_id.
+            let owner_label = format!("chat_channel:{}:{}", channel_id, sender_id);
+            match conn_mgr
+                .spawn_agent(
+                    conv.agent_type,
+                    Some(folder.path.clone()),
+                    conv.external_id.clone(),
+                    BTreeMap::new(),
+                    owner_label,
+                    emitter.clone(),
+                )
+                .await
+            {
+                Ok(id) => id,
+                Err(e) => {
+                    return RichMessage::error(format!(
+                        "{}{e}",
+                        i18n::failed_to_start_agent_label(lang)
+                    ));
+                }
+            }
         }
     };
 
-    // Register in bridge (no pending prompt for resume)
+    // Register/refresh bridge entry so subsequent ACP events route to this
+    // Telegram (channel_id, sender_id). For an attached connection this
+    // replaces any previous binding (last-attach-wins).
     {
         let session = ActiveSession {
             channel_id,
@@ -712,7 +727,15 @@ pub async fn handle_followup(req: FollowupRequest<'_>) -> RichMessage {
         text: req.text.to_string(),
     }];
 
-    if let Err(e) = req.conn_mgr.send_prompt(&connection_id, blocks).await {
+    // `chat:` is channel-agnostic — same prefix for Telegram, WeChat, Lark
+    // etc. The (channel_id, sender_id) pair already uniquely identifies the
+    // origin; the prefix only distinguishes chat-channel sources from `web`.
+    let source = format!("chat:{}:{}", req.channel_id, req.sender_id);
+    if let Err(e) = req
+        .conn_mgr
+        .send_prompt(&connection_id, blocks, &source)
+        .await
+    {
         // Connection may have died
         req.bridge.lock().await.remove(&connection_id);
         let _ = sender_context_service::clear_session(req.db, req.channel_id, req.sender_id).await;

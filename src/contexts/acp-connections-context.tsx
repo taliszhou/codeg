@@ -677,6 +677,9 @@ function applyStreamingAction(
   // a "Thinking..." indicator immediately (and for newer Claude models that
   // redact thinking text entirely, keeping the empty block as the signal).
   if (action.type === "CONTENT_DELTA" && action.text.length === 0) return null
+  if (conn.status !== "prompting") {
+    console.warn("[ACP][FE][applyStreamingAction] delta arriving while status=", conn.status, "text=", JSON.stringify(action.text.slice(-50)))
+  }
 
   const prev = ensureLiveMessage(conn.liveMessage)
   const lastBlock = prev.content[prev.content.length - 1]
@@ -1850,6 +1853,7 @@ export function AcpConnectionsProvider({ children }: { children: ReactNode }) {
     }
 
     const compacted = Array.from(grouped.values()).flat()
+    console.log("[ACP][FE][flush] flushing queue, queued=", queued.length, "compacted=", compacted.length, "texts=", compacted.map(a => JSON.stringify(a.text.slice(-50))))
     dispatch({ type: "STREAM_BATCH", actions: compacted })
   }, [dispatch])
 
@@ -1969,6 +1973,7 @@ export function AcpConnectionsProvider({ children }: { children: ReactNode }) {
           dispatch({ type: "STATUS_CHANGED", contextKey, status: e.status })
           break
         case "content_delta":
+          console.log("[ACP][FE][event] content_delta received, len=", e.text.length, "raw=", JSON.stringify(e.text))
           enqueueStreamingAction({
             type: "CONTENT_DELTA",
             contextKey,
@@ -2204,8 +2209,11 @@ export function AcpConnectionsProvider({ children }: { children: ReactNode }) {
           })
           break
         case "turn_complete": {
+          console.log("[ACP][FE][turn_complete] received, pending queue size=", streamingQueueRef.current.length)
           flushStreamingQueue()
           flushPendingToolCallUpdates()
+          const preConn = storeRef.current.connections.get(contextKey)
+          console.log("[ACP][FE][turn_complete] after flush, liveMessage content=", preConn?.liveMessage?.content.map(b => b.type === "text" ? JSON.stringify(b.text.slice(-80)) : b.type))
           dispatch({
             type: "STATUS_CHANGED",
             contextKey,
@@ -2370,6 +2378,13 @@ export function AcpConnectionsProvider({ children }: { children: ReactNode }) {
               size: e.size,
             },
           })
+          break
+        case "user_prompt_sent":
+          // Self-source ("web") is already rendered as an optimistic turn by
+          // the sender's tab; ignore here. Cross-source events (e.g. a
+          // Telegram user typing into the same conversation) are picked up
+          // by `useAcpEvent` consumers — see ConversationTabView, which
+          // injects them as user turns into the timeline.
           break
       }
     },

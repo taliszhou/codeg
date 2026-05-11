@@ -404,13 +404,8 @@ const ConversationTabView = memo(function ConversationTabView({
         effectiveConversationId
       )
     }
-  }, [
-    completeTurn,
-    connStatus,
-    conn.liveMessage,
-    effectiveConversationId,
-    syncTurnMetadata,
-  ])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- conn.liveMessage intentionally excluded: read current value at connStatus transition, don't re-run on every streaming delta
+  }, [completeTurn, connStatus, effectiveConversationId, syncTurnMetadata])
 
   // Auto-send queued messages when agent finishes responding.
   // Refs are synced via useEffect; the auto-send effect is declared
@@ -437,6 +432,31 @@ const ConversationTabView = memo(function ConversationTabView({
       }
     })
   }, [connStatus])
+
+  // Inject user prompts originating from a different surface (e.g. a
+  // Telegram chat sharing this connection) into the timeline. Self-sourced
+  // ("web") events are skipped because handleSend already appended an
+  // optimistic turn for them. Other tabs of this same connection will each
+  // inject independently — this is intentional so every Web view sees the
+  // remote prompt regardless of which tab is active.
+  useAcpEvent((envelope: EventEnvelope) => {
+    if (envelope.type !== "user_prompt_sent") return
+    if (envelope.source === "web") return
+    if (!conn.connectionId || envelope.connection_id !== conn.connectionId)
+      return
+
+    const text = envelope.text
+    if (!text) return
+
+    const blocks: ContentBlock[] = [{ type: "text", text }]
+    const turn: MessageTurn = {
+      id: `remote-${randomUUID()}`,
+      role: "user",
+      blocks,
+      timestamp: new Date().toISOString(),
+    }
+    appendOptimisticTurn(effectiveConversationId, turn, turn.id)
+  })
 
   useEffect(() => {
     // Only sync non-null liveMessage updates to state. When conn.liveMessage
@@ -751,7 +771,7 @@ const ConversationTabView = memo(function ConversationTabView({
 
   const handleAnswerQuestion = useCallback(
     (answer: string) => {
-      if (connStatus !== "connected") return
+      if (connStatus !== "connected" && connStatus !== "prompting") return
       const optimisticTurn: MessageTurn = {
         id: `optimistic-${randomUUID()}`,
         role: "user",
@@ -850,6 +870,7 @@ const ConversationTabView = memo(function ConversationTabView({
       onNewSession={
         canShowDetailErrorActions ? handleOpenNewSession : undefined
       }
+      onAnswerQuestion={handleAnswerQuestion}
     />
   )
 

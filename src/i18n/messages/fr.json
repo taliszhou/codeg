@@ -1757,7 +1757,9 @@
         "tokenCacheWrite": "Écriture du cache",
         "duration": "Durée",
         "completedAt": "Terminé à",
-        "jumpToPreviousUserMessage": "Aller au message utilisateur"
+        "jumpToPreviousUserMessage": "Aller au message utilisateur",
+        "turnLabel": "Tour {number}",
+        "toolCallCount": "{count} appels d'outils"
       },
       "liveTurnStats": {
         "thinking": "Réflexion...",

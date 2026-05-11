@@ -1757,7 +1757,9 @@
         "tokenCacheWrite": "快取寫入",
         "duration": "耗時",
         "completedAt": "完成時間",
-        "jumpToPreviousUserMessage": "跳轉到上一條使用者訊息"
+        "jumpToPreviousUserMessage": "跳轉到上一條使用者訊息",
+        "turnLabel": "第 {number} 輪",
+        "toolCallCount": "{count} 個工具呼叫"
       },
       "liveTurnStats": {
         "thinking": "思考中...",

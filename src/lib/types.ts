@@ -1,6 +1,7 @@
 export type AgentType =
   | "claude_code"
   | "codex"
+  | "generic_agent"
   | "open_code"
   | "gemini"
   | "open_claw"
@@ -274,6 +275,7 @@ export const STATUS_COLORS: Record<ConversationStatus, string> = {
 
 export const AGENT_DISPLAY_ORDER: AgentType[] = [
   "codex",
+  "generic_agent",
   "claude_code",
   "open_code",
   "gemini",
@@ -294,6 +296,7 @@ export function compareAgentType(a: AgentType, b: AgentType): number {
 export const ALL_AGENT_TYPES: AgentType[] = [
   "claude_code",
   "codex",
+  "generic_agent",
   "open_code",
   "gemini",
   "open_claw",
@@ -309,6 +312,7 @@ export const MODEL_PROVIDER_AGENT_TYPES: AgentType[] = [
 export const AGENT_LABELS: Record<AgentType, string> = {
   claude_code: "Claude Code",
   codex: "Codex",
+  generic_agent: "GenericAgent",
   open_code: "OpenCode",
   gemini: "Gemini CLI",
   open_claw: "OpenClaw",
@@ -318,6 +322,7 @@ export const AGENT_LABELS: Record<AgentType, string> = {
 export const AGENT_COLORS: Record<AgentType, string> = {
   claude_code: "bg-[#D97757]",
   codex: "bg-[#7A9DFF]",
+  generic_agent: "bg-[#0F766E]",
   open_code: "bg-black",
   gemini: "bg-[#3186FF]",
   open_claw: "bg-emerald-600",
@@ -559,6 +564,24 @@ export type AcpEvent =
       type: "usage_update"
       used: number
       size: number
+    }
+  | {
+      /**
+       * Echo of a user-authored prompt that was just dispatched on this
+       * connection. Emitted from the backend prompt entry point so all
+       * subscribers (Web tabs, chat-channel bridges) can render the user's
+       * text in their own view. `source` identifies the originator so each
+       * subscriber can drop events for prompts they themselves sent.
+       *
+       * Format:
+       *   - `"web"` — sent from the Web/Tauri UI
+       *   - `"chat:{channel_id}:{sender_id}"` — sent from a chat channel
+       *     (Telegram, WeChat, Lark, …); prefix is channel-agnostic and
+       *     only the (channel_id, sender_id) pair is significant.
+       */
+      type: "user_prompt_sent"
+      text: string
+      source: string
     }
 
 /**

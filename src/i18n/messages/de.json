@@ -1757,7 +1757,9 @@
         "tokenCacheWrite": "Cache-Schreiben",
         "duration": "Dauer",
         "completedAt": "Abgeschlossen um",
-        "jumpToPreviousUserMessage": "Zur Benutzernachricht springen"
+        "jumpToPreviousUserMessage": "Zur Benutzernachricht springen",
+        "turnLabel": "Runde {number}",
+        "toolCallCount": "{count} Toolaufrufe"
       },
       "liveTurnStats": {
         "thinking": "Denkt nach...",

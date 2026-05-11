@@ -170,6 +170,31 @@ async fn build_agent(
     debug_assert_eq!(meta.agent_type, agent_type);
 
     match meta.distribution {
+        AgentDistribution::Local { .. } => {
+            let python = registry::find_genericagent_python().ok_or_else(|| {
+                AcpError::SdkNotInstalled(
+                    "GenericAgent is not installed. Python was not found in PATH.".to_string(),
+                )
+            })?;
+            let bridge = registry::find_genericagent_bridge().ok_or_else(|| {
+                AcpError::SdkNotInstalled(
+                    "GenericAgent is not installed. genericagent_acp_bridge.py was not found."
+                        .to_string(),
+                )
+            })?;
+            let bridge_str = bridge.to_string_lossy().to_string();
+            let refs = [python.as_str(), bridge_str.as_str()];
+            let agent_name = meta.name.to_string();
+            AcpAgent::from_args(&refs)
+                .map(|a| {
+                    a.with_debug(move |line, dir| {
+                        if dir == sacp_tokio::LineDirection::Stderr {
+                            eprintln!("[ACP][{agent_name}][stderr] {line}");
+                        }
+                    })
+                })
+                .map_err(|e| AcpError::SpawnFailed(e.to_string()))
+        }
         AgentDistribution::Npx { cmd, args, env, .. } => {
             let merged_env = merge_agent_env(env, runtime_env);
             let mut parts: Vec<String> = Vec::new();
@@ -2531,7 +2556,10 @@ async fn run_conversation_loop<'a>(
                     tokio::select! {
                         update = session.read_update() => {
                             let update = match update {
-                                Ok(u) => u,
+                                Ok(u) => {
+                                    eprintln!("[ACP][loop] got update: {:?}", std::mem::discriminant(&u));
+                                    u
+                                }
                                 Err(e) => {
                                     eprintln!("[ACP] Ignoring unrecognized session update: {e}");
                                     continue;
@@ -2545,9 +2573,11 @@ async fn run_conversation_loop<'a>(
                                     let session_id = sid.clone();
                                     let cwd_opt = Some(cwd);
                                     let dispatch = fix_usage_update_nulls(dispatch);
+                                    eprintln!("[ACP][loop] dispatch method={:?}", dispatch.method());
                                     if let Err(e) = MatchDispatch::new(dispatch)
                                         .if_notification(
                                             async |notif: SessionNotification| {
+                                                eprintln!("[ACP][loop] matched SessionNotification!");
                                                 let should_poll_now = track_terminal_tool_calls(
                                                     &notif.update,
                                                     &mut tracked_terminal_tool_calls,
@@ -2571,6 +2601,7 @@ async fn run_conversation_loop<'a>(
                                         )
                                         .await
                                         .otherwise(async |dispatch| {
+                                            eprintln!("[ACP][loop] otherwise branch hit, method={:?}", dispatch.method());
                                             maybe_emit_claude_sdk_ext_notification(&st, &h, dispatch).await;
                                             Ok(())
                                         })
@@ -2598,6 +2629,7 @@ async fn run_conversation_loop<'a>(
                                     } else {
                                         raw_reason_str
                                     };
+                                    eprintln!("[ACP][emit] TurnComplete via StopReason branch, reason={}", reason_str);
                                     if let Some(err_event) =
                                         turn_failure_error_event(reason_str, agent_type)
                                     {
@@ -2619,7 +2651,47 @@ async fn run_conversation_loop<'a>(
                             }
                         }
                         prompt_result = &mut prompt_response => {
+                            eprintln!("[ACP][loop] prompt_response completed");
                             let reason = prompt_result?.stop_reason;
+
+                            // Drain any remaining updates still in the channel.
+                            // When tokio::select! picks prompt_response over
+                            // read_update, buffered ContentDeltas would be lost.
+                            while let Ok(Ok(msg)) = tokio::time::timeout(
+                                std::time::Duration::from_millis(50),
+                                session.read_update(),
+                            ).await {
+                                if let SessionMessage::SessionMessage(dispatch) = msg {
+                                    let h = emitter.clone();
+                                    let st = Arc::clone(state);
+                                    let cwd_opt = Some(cwd);
+                                    let _ = MatchDispatch::new(dispatch)
+                                        .if_notification(async |notif: SessionNotification| {
+                                            let should_poll_now = track_terminal_tool_calls(
+                                                &notif.update,
+                                                &mut tracked_terminal_tool_calls,
+                                            );
+                                            emit_conversation_update(&st, &h, agent_type, notif.update, cwd_opt, &mut raw_output_cache).await;
+                                            if should_poll_now {
+                                                poll_tracked_terminal_tool_calls(
+                                                    terminal_runtime.as_ref(),
+                                                    &sid,
+                                                    &st,
+                                                    &h,
+                                                    &mut tracked_terminal_tool_calls,
+                                                ).await;
+                                            }
+                                            Ok(())
+                                        })
+                                        .await
+                                        .otherwise(async |d| {
+                                            maybe_emit_claude_sdk_ext_notification(state, emitter, d).await;
+                                            Ok(())
+                                        })
+                                        .await;
+                                }
+                            }
+
                             if !tracked_terminal_tool_calls.is_empty() {
                                 poll_tracked_terminal_tool_calls(
                                     terminal_runtime.as_ref(),
@@ -2638,6 +2710,7 @@ async fn run_conversation_loop<'a>(
                             } else {
                                 raw_reason_str
                             };
+                            eprintln!("[ACP][emit] TurnComplete via prompt_response branch, reason={}", reason_str);
                             if let Some(err_event) =
                                 turn_failure_error_event(reason_str, agent_type)
                             {
@@ -3165,6 +3238,7 @@ async fn emit_conversation_update(
     cwd: Option<&str>,
     raw_output_cache: &mut ToolCallOutputCache,
 ) {
+    eprintln!("[ACP][emit] update variant: {:?}", std::mem::discriminant(&update));
     match update {
         SessionUpdate::UserMessageChunk(_) => {
             // User echo chunks are informational for transcript sync and
@@ -3174,6 +3248,7 @@ async fn emit_conversation_update(
             content: ContentBlock::Text(text),
             ..
         }) => {
+            eprintln!("[ACP][emit] ContentDelta text len={} raw={:?}", text.text.len(), &text.text);
             emit_with_state(
                 state,
                 emitter,
@@ -3181,8 +3256,8 @@ async fn emit_conversation_update(
             )
             .await;
         }
-        SessionUpdate::AgentMessageChunk(_) => {
-            // Non-text chunks are currently not surfaced in live streaming UI.
+        SessionUpdate::AgentMessageChunk(ref chunk) => {
+            eprintln!("[ACP][emit] AgentMessageChunk non-text: content={:?}", std::mem::discriminant(&chunk.content));
         }
         SessionUpdate::AgentThoughtChunk(ContentChunk {
             content: ContentBlock::Text(text),
