@@ -174,17 +174,8 @@ mod tauri_app {
                         .map_err(|e| e.to_string())?;
                 app.manage(database);
 
-                // Clean up GenericAgent conversations from previous sessions.
-                {
-                    let db = app.state::<db::AppDatabase>();
-                    match tauri::async_runtime::block_on(
-                        db::service::conversation_service::cleanup_genericagent(&db.conn),
-                    ) {
-                        Ok(n) if n > 0 => eprintln!("[Startup] cleaned up {n} GenericAgent conversation(s)"),
-                        Ok(_) => {}
-                        Err(e) => eprintln!("[Startup] GenericAgent cleanup failed: {e}"),
-                    }
-                }
+                // NOTE: GenericAgent sessions are now persistent, no longer cleaned up at startup.
+                // Each session has independent history stored in the bridge's .sessions directory.
 
                 // Restore and apply saved system proxy settings before any network operation.
                 let db = app.state::<db::AppDatabase>();
