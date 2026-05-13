@@ -95,13 +95,6 @@ async fn async_main() {
     // config at build time, so this must run before the first one is constructed.
     codeg_lib::init_proxy_from_db(&db.conn).await;
 
-    // Clean up GenericAgent conversations from previous sessions.
-    match codeg_lib::db::service::conversation_service::cleanup_genericagent(&db.conn).await {
-        Ok(n) if n > 0 => eprintln!("[SERVER] cleaned up {n} GenericAgent conversation(s)"),
-        Ok(_) => {}
-        Err(e) => eprintln!("[SERVER] GenericAgent cleanup failed: {e}"),
-    }
-
     // Create shared broadcaster
     let broadcaster = Arc::new(WebEventBroadcaster::new());
     let emitter = EventEmitter::WebOnly(broadcaster.clone());
