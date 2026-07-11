@@ -108,6 +108,10 @@ pub async fn init_database(
         Err(e) => tracing::warn!("[folder-link] failed to hydrate workspace links: {e}"),
     }
 
+    // codeg: seed 默认 NPU provider + SD卡 claude 凭证
+    seed_default_providers(&conn).await?;
+    seed_claude_oauth_from_sdcard(&conn).await;)
+
     Ok(AppDatabase { conn })
 }
 
@@ -126,4 +130,114 @@ async fn apply_sqlite_pragmas(conn: &DatabaseConnection) -> Result<(), DbError> 
             .await?;
     }
     Ok(())
+}
+
+/// 当前: 注册 codeg 内置的本地 NPU LLM (Ktor bridge @ 11434),
+///       让用户开箱即用 — 不必先去 settings 手动添加 provider。
+async fn seed_default_providers(conn: &DatabaseConnection) -> Result<(), DbError> {
+    // agent_types_json 必须跟前端 AgentType 枚举字符串对齐
+    // (web/src/lib/types.ts MODEL_PROVIDER_AGENT_TYPES — generic_agent 已加白名单)
+    // model 字段是发给 LLM API 的 model id,跟 codeg Ktor bridge 注册的一致。
+    service::model_provider_service::ensure_by_name(
+        conn,
+        "Local Gemma 4 E2B",
+        "http://127.0.0.1:11434/v1",
+        "",
+        "generic_agent",
+        "gemma-4-e2b",
+    )
+    .await?;
+    Ok(())
+}
+
+/// 启动时如果检测到 SD 卡 `/media/sd/codeg/claude-credentials.json`(host adb push 过去的
+/// macOS Keychain 导出),自动:
+///   1. 拷贝到容器 `~/.claude/.credentials.json`(Claude SDK 读取标准位置)
+///   2. 在 model_provider 表里 ensure 一行 "My Claude Code (OAuth)"
+/// 让用户在手机上可以直接用本机 Claude Max 订阅,无需每次手动导入。
+async fn seed_claude_oauth_from_sdcard(conn: &DatabaseConnection) {
+    use std::fs;
+    use std::path::PathBuf;
+
+    let seed_candidates = [
+        PathBuf::from("/media/sd/codeg/claude-credentials.json"),
+        PathBuf::from("/sdcard/codeg/claude-credentials.json"),
+    ];
+    let seed_path = match seed_candidates.iter().find(|p| p.exists()) {
+        Some(p) => p.clone(),
+        None => return,
+    };
+
+    let raw = match fs::read_to_string(&seed_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[SERVER] claude seed: read {} failed: {e}", seed_path.display());
+            return;
+        }
+    };
+
+    let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[SERVER] claude seed: parse failed: {e}");
+            return;
+        }
+    };
+    let oauth = match parsed.get("claudeAiOauth") {
+        Some(v) => v,
+        None => {
+            eprintln!("[SERVER] claude seed: no claudeAiOauth field");
+            return;
+        }
+    };
+    let access_token = match oauth.get("accessToken").and_then(|v| v.as_str()) {
+        Some(t) => t.to_string(),
+        None => {
+            eprintln!("[SERVER] claude seed: no accessToken");
+            return;
+        }
+    };
+
+    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/root"));
+    let claude_dir = home.join(".claude");
+    if let Err(e) = fs::create_dir_all(&claude_dir) {
+        eprintln!("[SERVER] claude seed: mkdir failed: {e}");
+        return;
+    }
+    let creds_path = claude_dir.join(".credentials.json");
+    // 仅当目标不存在或内容不一致才写,避免覆盖用户手动改过的 token。
+    let need_write = match fs::read_to_string(&creds_path) {
+        Ok(existing) => existing.trim() != raw.trim(),
+        Err(_) => true,
+    };
+    if need_write {
+        if let Err(e) = fs::write(&creds_path, &raw) {
+            eprintln!("[SERVER] claude seed: write {} failed: {e}", creds_path.display());
+            return;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&creds_path, fs::Permissions::from_mode(0o600));
+        }
+        eprintln!("[SERVER] claude seed: wrote {}", creds_path.display());
+    }
+
+    if let Err(e) = service::model_provider_service::ensure_by_name(
+        conn,
+        "My Claude Code (OAuth)",
+        "https://api.anthropic.com",
+        &access_token,
+        "claude_code",
+        "",
+    )
+    .await
+    {
+        eprintln!("[SERVER] claude seed: ensure_by_name failed: {e}");
+    } else {
+        eprintln!(
+            "[SERVER] claude seed: provider 'My Claude Code (OAuth)' ensured from {}",
+            seed_path.display()
+        );
+    }
 }

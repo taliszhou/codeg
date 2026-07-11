@@ -10,6 +10,7 @@ pub mod model_provider;
 pub mod pet;
 pub mod quick_message;
 pub mod remote_workspace_connection;
+pub mod remote_device;
 pub mod system;
 pub mod token_usage;
 pub mod work_task;

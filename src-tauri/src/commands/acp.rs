@@ -403,6 +403,9 @@ async fn prewarm_uvx_agent(
         .arg(package)
         .arg(cmd)
         .arg("--version")
+        // proot link2symlink mode forbids hardlinks across directories; use
+        // copy mode so uv doesn't attempt cross-dir hardlinks in its cache.
+        .env("UV_LINK_MODE", "copy")
         .output()
         .await
         .map_err(|e| AcpError::SpawnFailed(format!("failed to run uvx: {e}")))?;
@@ -570,6 +573,7 @@ fn is_npm_command_candidate(path: &Path) -> bool {
 pub(crate) async fn verify_agent_installed(agent_type: AgentType) -> Result<(), AcpError> {
     let meta = registry::get_agent_meta(agent_type);
     match meta.distribution {
+        registry::AgentDistribution::Local { .. } => Ok(()),
         registry::AgentDistribution::Npx { cmd, .. } => {
             if !is_cmd_available(cmd).await {
                 // INVARIANT: the substring "is not installed" is matched
@@ -686,6 +690,7 @@ async fn npm_list_version(
 async fn detect_local_version(agent_type: AgentType) -> Option<String> {
     let meta = registry::get_agent_meta(agent_type);
     match meta.distribution {
+        registry::AgentDistribution::Local { .. } => Some("0.1.0".to_string()),
         registry::AgentDistribution::Npx { cmd, package, .. } => {
             let resolved = resolve_npx_command(cmd).await?;
             // Try `npm list -g <package_name> --json` to get the real installed version.
@@ -2357,6 +2362,43 @@ async fn install_npm_global_package_streaming_inner(
             );
             return install_npm_to_user_prefix_streaming(package, &registry_arg, task_id, emitter)
                 .await;
+        }
+
+        // ENOENT on rename: proot cacache atomic-rename flakiness — retry up to 2
+        // times with a cleared cache to avoid the stale tmp file.
+        if stderr.contains("ENOENT") && stderr.contains("rename") {
+            for attempt in 1u8..=2 {
+                emit_agent_install_event(
+                    emitter,
+                    task_id,
+                    AgentInstallEventKind::Log,
+                    format!("npm cacache ENOENT, clearing cache and retrying (attempt {attempt}/2)..."),
+                );
+                let _ = crate::process::tokio_command("npm")
+                    .args(["cache", "clean", "--force"])
+                    .output()
+                    .await;
+                let (retry_success, retry_stderr) = run_npm_streaming(
+                    &["install", "-g", NPM_INCLUDE_OPTIONAL, &registry_arg, package],
+                    task_id,
+                    emitter,
+                )
+                .await?;
+                if retry_success {
+                    return Ok(());
+                }
+                if !retry_stderr.contains("ENOENT") || !retry_stderr.contains("rename") {
+                    // Different error — fall through to normal error handling below.
+                    return Err(AcpError::protocol(format!(
+                        "failed to install npm package globally: {}",
+                        retry_stderr.trim()
+                    )));
+                }
+            }
+            return Err(AcpError::protocol(format!(
+                "failed to install npm package globally after ENOENT retries: {}",
+                stderr.trim()
+            )));
         }
 
         // EEXIST: file conflict — retry with --force to overwrite
@@ -7997,6 +8039,7 @@ fn persist_agent_local_config_json(
 
 pub(crate) fn skill_storage_spec(agent_type: AgentType) -> Option<SkillStorageSpec> {
     match agent_type {
+        AgentType::GenericAgent => None,
         AgentType::ClaudeCode => Some(SkillStorageSpec {
             kind: SkillStorageKind::SkillDirectoryOnly,
             global_dirs: vec![home_dir_or_default().join(".claude").join("skills")],
@@ -9270,7 +9313,9 @@ pub async fn acp_cursor_list_models(
 
 /// Primary env var keys for each agent type: (api_base_url, api_key, model).
 /// Shared by runtime env resolution, model-provider cascade, and config patching.
-fn agent_env_keys(agent_type: AgentType) -> (&'static str, &'static str, &'static str) {
+pub(crate) fn agent_env_keys(
+    agent_type: AgentType,
+) -> (&'static str, &'static str, &'static str) {
     match agent_type {
         AgentType::ClaudeCode => (
             "ANTHROPIC_BASE_URL",
@@ -9413,12 +9458,36 @@ pub(crate) async fn apply_model_provider_env(
         Ok(Some(p)) => p,
         _ => return,
     };
-    let (url_key, key_key, _) = agent_env_keys(agent_type);
+    let (url_key, key_key, model_key) = agent_env_keys(agent_type);
     if !provider.api_url.trim().is_empty() {
         runtime_env.insert(url_key.to_string(), provider.api_url.clone());
     }
     if !provider.api_key.trim().is_empty() {
         runtime_env.insert(key_key.to_string(), provider.api_key.clone());
+    }
+    // codeg: 注入 model env。spawn_agent_connection 对 codex 会读这个值强制
+    // 设为会话 model option(codex 列表只有 gpt-5 系列, 否则选不到自定义 model)。
+    if let Some(m) = provider.model.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        runtime_env.insert(model_key.to_string(), m.to_string());
+    }
+
+    // codeg: codex 的 model 写在 config.toml(非 env), 而 cascade 仅在 model
+    // provider「update 且 model 变化」时触发 → create 时填的 model 从未落盘,
+    // codex 退回内置默认。这里在 spawn 前兜底同步 codex config.toml, 保证它用
+    // provider 配置的 model + endpoint。
+    if agent_type == AgentType::Codex {
+        let model = provider.model.as_deref().map(str::trim).unwrap_or("");
+        let model_env = parse_provider_model(agent_type, Some(model));
+        let codex_action = provider_codex_model_action(agent_type, Some(model));
+        if let Err(e) = cascade_update_agent_config(
+            agent_type,
+            &provider.api_url,
+            &provider.api_key,
+            &model_env,
+            &codex_action,
+        ) {
+            tracing::warn!("[ACP] codex config.toml sync at spawn failed: {e}");
+        }
     }
 }
 
@@ -9557,6 +9626,7 @@ fn cascade_update_agent_config(
 ) -> Result<(), AcpError> {
     let (url_key, key_key, _) = agent_env_keys(agent_type);
     match agent_type {
+        AgentType::GenericAgent => {}
         AgentType::ClaudeCode | AgentType::Gemini => {
             // Write into config.env (not root-level). For model entries, use
             // JSON-null for "clear" — `merge_json_values` interprets null as
@@ -10505,6 +10575,10 @@ pub(crate) async fn acp_get_agent_status_core(
         .map_err(|e| AcpError::protocol(e.to_string()))?;
 
     let (available, installed_version) = match &meta.distribution {
+        registry::AgentDistribution::Local { .. } => (
+            registry::find_genericagent_bridge().is_some(),
+            Some("0.1.0".to_string()),
+        ),
         registry::AgentDistribution::Npx { cmd, package, .. } => {
             let resolved = resolve_npx_command(cmd).await;
             let mut version = resolved
@@ -10604,6 +10678,7 @@ pub(crate) async fn acp_list_agents_core(db: &AppDatabase) -> Result<Vec<AcpAgen
         let setting = settings_map.get(&agent_type);
         let meta = registry::get_agent_meta(agent_type);
         let (available, dist_type, local_installed_version) = match &meta.distribution {
+            registry::AgentDistribution::Local { .. } => (registry::find_genericagent_bridge().is_some(), "local", Some("0.1.0".to_string())),
             registry::AgentDistribution::Npx { cmd, package, .. } => {
                 // Keep the list path bounded: each list request probes npm
                 // global prefix at most once, then reuses the result across
@@ -11872,6 +11947,9 @@ pub(crate) async fn acp_download_agent_binary_core(
 
     let meta = registry::get_agent_meta(agent_type);
     let result = match meta.distribution {
+        registry::AgentDistribution::Local { .. } => Err(AcpError::protocol(
+            "GenericAgent is a local bridge; no binary to download".to_string(),
+        )),
         registry::AgentDistribution::Binary {
             version,
             cmd,
@@ -12145,6 +12223,9 @@ pub(crate) async fn acp_prepare_npx_agent_core(
 
     let meta = registry::get_agent_meta(agent_type);
     let result = match meta.distribution {
+        registry::AgentDistribution::Local { .. } => Err(AcpError::protocol(
+            "GenericAgent is a local bridge; nothing to install".to_string(),
+        )),
         registry::AgentDistribution::Npx { package, cmd, .. } => {
             let default = agent_setting_service::AgentDefaultInput {
                 agent_type,
@@ -12438,6 +12519,7 @@ pub(crate) async fn acp_uninstall_agent_core(
 
     let result: Result<(), AcpError> = async {
         match meta.distribution {
+            registry::AgentDistribution::Local { .. } => {}
             registry::AgentDistribution::Binary { .. } => {
                 binary_cache::clear_agent_cache(agent_type)?;
             }
@@ -18346,4 +18428,251 @@ model = "gpt"
             );
         }
     }
+}
+
+/// 把它们作为一组 sessions 写到 mykey.py 的 marker 块。
+/// 任何 ModelProvider 改动 (create/update/delete) 后,以及 server 启动时,都会调一次。
+/// 不影响 mykey.py 中 marker 块以外的用户自定义内容。
+pub async fn resync_generic_agent_mykey(
+    conn: &sea_orm::DatabaseConnection,
+) -> Result<(), AcpError> {
+    if registry::find_genericagent_root().is_none() {
+        // GenericAgent 还没装,跳过
+        return Ok(());
+    }
+    let all = model_provider_service::list_all(conn)
+        .await
+        .map_err(|e| AcpError::protocol(format!("list providers failed: {e}")))?;
+
+    let providers: Vec<&crate::db::entities::model_provider::Model> = all
+        .iter()
+        .filter(|p| {
+            // agent_types_json 含 "generic_agent" 字符串就算 (粗匹配足够)
+            p.agent_types_json.contains("generic_agent")
+        })
+        .collect();
+
+    write_generic_agent_mykey(&providers)
+}
+
+/// 启动时调用 — 等价于 resync_generic_agent_mykey,语义上叫 ensure 强调 idempotent。
+pub async fn ensure_default_genericagent_config(
+    conn: &sea_orm::DatabaseConnection,
+) -> Result<(), AcpError> {
+    resync_generic_agent_mykey(conn).await
+}
+
+/// 把 provider 名字转成安全的 Python 标识符(变量名后缀):
+/// - 非字母数字 → 下划线
+/// - 首字符不能数字
+/// 例: "Local Gemma 4 E2B" → "local_gemma_4_e2b", "My GPT-4!" → "my_gpt_4_"
+fn sanitize_python_ident(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+        } else {
+            out.push('_');
+        }
+    }
+    if out.is_empty() || out.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+        out.insert(0, '_');
+    }
+    out
+}
+
+/// Python 字符串字面量转义 (单引号风格)。处理 backslash 和 single-quote。
+fn py_str(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('\'', "\\'")
+}
+
+/// 注释掉 mykey.py 中 template 自带的占位 default 变量赋值块:
+///   `native_oai_config = { ... }`  → `# native_oai_config = { ... }`
+///   `native_claude_config = { ... }` → 同
+///   `mixin_config = { ... }` → 同 (引用了被注释的 'gpt-native' 会报 BAD Mixin config)
+/// 只匹配**行首** + **变量名末尾不接其他标识符字符** (即不动 native_oai_config_xxx)。
+/// 块边界: 从 `^<var>\s*=\s*\{` 到对应的 `^}` 单独一行(顶格无缩进)。
+fn comment_out_template_defaults(content: &str) -> String {
+    const TARGETS: &[&str] = &["native_oai_config", "native_claude_config", "mixin_config"];
+    let lines: Vec<&str> = content.lines().collect();
+    let mut out_lines: Vec<String> = Vec::with_capacity(lines.len());
+    let mut in_block = false;
+
+    for line in &lines {
+        if in_block {
+            out_lines.push(format!("# {line}"));
+            // 块结束: 行首独占 `}` (顶格无缩进)
+            if *line == "}" || line.starts_with("} ") || line.starts_with("}\t") {
+                in_block = false;
+            }
+            continue;
+        }
+        // 检测块开头: 行首正好是 target 之一 + 后面接 `=` (允许空格)
+        let mut is_target_start = false;
+        for &t in TARGETS {
+            if line.starts_with(t) {
+                let rest = &line[t.len()..];
+                // 紧接的字符不能是 ident 字符(避免误匹配 native_oai_config_xxx)
+                let next_ok = rest
+                    .chars()
+                    .next()
+                    .map(|c| !(c.is_ascii_alphanumeric() || c == '_'))
+                    .unwrap_or(true);
+                if next_ok && rest.trim_start().starts_with('=') && rest.contains('{') {
+                    is_target_start = true;
+                    break;
+                }
+            }
+        }
+        if is_target_start {
+            out_lines.push(format!("# {line}"));
+            // 若本行已含闭合 `}` (单行 dict),不进 block 模式
+            if !line.contains('}') {
+                in_block = true;
+            }
+            continue;
+        }
+        out_lines.push((*line).to_string());
+    }
+    let mut joined = out_lines.join("\n");
+    if content.ends_with('\n') {
+        joined.push('\n');
+    }
+    joined
+}
+
+/// 全集写 mykey.py 的 marker 块。给定 provider 列表(已过滤含 generic_agent),
+/// 生成多个 native_oai_config_<sanitize(name)> 变量。
+/// - 文件不存在: 优先从 mykey_template.py 拷,否则空文件
+/// - marker 块已存在: 删除旧块,在末尾写新块
+/// - marker 块外的用户内容(其他 LLM provider / 聊天平台 token 等)保留
+///
+/// 字段命名严格按 GenericAgent BaseSession.__init__ 期望 (llmcore.py:509-537):
+///   apikey / apibase / model / name / max_retries / connect_timeout / read_timeout
+fn write_generic_agent_mykey(
+    providers: &[&crate::db::entities::model_provider::Model],
+) -> Result<(), AcpError> {
+    const BEGIN_MARKER: &str = "# === BEGIN codeg auto-config (do not edit) ===";
+    const END_MARKER: &str = "# === END codeg auto-config ===";
+
+    let root = match registry::find_genericagent_root() {
+        Some(p) => p,
+        None => return Ok(()),
+    };
+    let mykey_path = root.join("mykey.py");
+    let template_path = root.join("mykey_template.py");
+
+    // 1) 读现有 mykey.py 或从模板拷
+    let mut content = if mykey_path.exists() {
+        std::fs::read_to_string(&mykey_path)
+            .map_err(|e| AcpError::protocol(format!("read mykey.py failed: {e}")))?
+    } else if template_path.exists() {
+        std::fs::read_to_string(&template_path)
+            .map_err(|e| AcpError::protocol(format!("read mykey_template.py failed: {e}")))?
+    } else {
+        String::new()
+    };
+
+    // 2) 删除已有 marker 块
+    if let (Some(begin_idx), Some(end_idx)) =
+        (content.find(BEGIN_MARKER), content.find(END_MARKER))
+    {
+        if end_idx > begin_idx {
+            let after_end = end_idx + END_MARKER.len();
+            let drop_to = if content[after_end..].starts_with('\n') {
+                after_end + 1
+            } else {
+                after_end
+            };
+            content.replace_range(begin_idx..drop_to, "");
+        }
+    }
+
+    // 2.5) 注释掉 mykey_template.py 自带的占位 native_oai_config / native_claude_config —
+    //      它们的 apikey='sk-<your-...>' / apibase=官方 endpoint, 直接用会 401。
+    //      ga 扫描规则只看顶层赋值变量,加 `# ` 前缀就从 mykeys dict 删除。
+    //      只处理"行首正好是 native_oai_config = {" 或 "native_claude_config = {" 这种,
+    //      带后缀的 native_oai_config_xxx 不动 (用户自己加的多 session 配置)。
+    content = comment_out_template_defaults(&content);
+
+    // 3) 构造新 marker 块: 每个 provider 一个 native_oai_config_<id> 变量
+    //    变量名必须含 'native' + 'oai' + 'config' 才会被 agentmain.py:55-66 扫描到。
+    //    用 sanitize(provider.name) 作为后缀,保证唯一性。同名 provider 加 _id 后缀避免冲突。
+    let mut block = String::new();
+    block.push_str(BEGIN_MARKER);
+    block.push_str("\n# Auto-managed by codeg — sync from codeg ModelProvider settings.\n");
+    block.push_str("# Manual edits inside this block will be overwritten on next cascade.\n");
+    block.push_str("# 每个 ModelProvider (agent_types 含 generic_agent) 对应一个 session。\n");
+    block.push_str("# 在 codeg ChatPage 上 'name' 字段是用户看到的 model 下拉值。\n\n");
+
+    use std::collections::HashSet;
+    let mut used_idents: HashSet<String> = HashSet::new();
+    for p in providers {
+        let base_ident = sanitize_python_ident(&p.name);
+        // 根据 api_url 选 GA session 类型 (见 llmcore.py::resolve_session):
+        //   - codeg bridge (127.0.0.1:11434 / Gemma 等不支持 OpenAI native tools)
+        //     → 用 oai_config_*  → LLMSession + ToolClient (prompt-based tool calling,
+        //       工具描述塞 system prompt, 期待 model 输出 <tool_use>{json}</tool_use>)
+        //   - api.anthropic.com → native_claude_config_* (Claude native content_blocks)
+        //   - 其他 OpenAI 兼容 (api.openai.com 等) → native_oai_config_* (native tools)
+        let url_lc = p.api_url.to_ascii_lowercase();
+        let prefix = if url_lc.contains("127.0.0.1:11434")
+            || url_lc.contains("localhost:11434")
+            || url_lc.contains("/v1/admin/") // codeg 内部专用 path
+        {
+            "oai_config"
+        } else if url_lc.contains("api.anthropic.com") {
+            "native_claude_config"
+        } else {
+            "native_oai_config"
+        };
+        let mut ident = format!("{prefix}_{base_ident}");
+        if !used_idents.insert(ident.clone()) {
+            ident = format!("{prefix}_{base_ident}_id{}", p.id);
+            used_idents.insert(ident.clone());
+        }
+        let model_id = if p.model.as_deref().unwrap_or("").is_empty() {
+            // 没填 model 字段时,fallback 用 provider name 作占位
+            // (codeg ChatPage 选这个 session 时会发到 API,API 大概率拒,但至少不 KeyError)
+            p.name.clone()
+        } else {
+            p.model.clone().unwrap_or_default()
+        };
+        block.push_str(&format!(
+            "{ident} = {{\n\
+             \x20   'name': '{}',\n\
+             \x20   'apikey': '{}',\n\
+             \x20   'apibase': '{}',\n\
+             \x20   'model': '{}',\n\
+             \x20   'api_mode': 'chat_completions',\n\
+             \x20   'max_retries': 1,\n\
+             \x20   'connect_timeout': 10,\n\
+             \x20   'read_timeout': 120,\n\
+             }}\n\n",
+            py_str(&p.name),
+            py_str(&p.api_key),
+            py_str(&p.api_url),
+            py_str(&model_id),
+        ));
+    }
+    block.push_str(END_MARKER);
+    block.push('\n');
+
+    // 4) Append (前后空行整洁)
+    if !content.is_empty() && !content.ends_with('\n') {
+        content.push('\n');
+    }
+    if !content.is_empty() && !content.ends_with("\n\n") {
+        content.push('\n');
+    }
+    content.push_str(&block);
+
+    // 5) 原子写
+    let tmp_path = root.join("mykey.py.tmp");
+    std::fs::write(&tmp_path, &content)
+        .map_err(|e| AcpError::protocol(format!("write mykey.py.tmp failed: {e}")))?;
+    std::fs::rename(&tmp_path, &mykey_path)
+        .map_err(|e| AcpError::protocol(format!("rename mykey.py.tmp -> mykey.py failed: {e}")))?;
+
+    Ok(())
 }

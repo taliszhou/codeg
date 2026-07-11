@@ -15,6 +15,7 @@ export type BuiltinAgentType =
   | "deepseek"
   | "qoder"
   | "antigravity"
+  | "generic_agent"
 
 /**
  * Which agent backs a conversation.
@@ -925,6 +926,7 @@ export const AGENT_DISPLAY_ORDER: BuiltinAgentType[] = [
   "deepseek",
   "qoder",
   "antigravity",
+  "generic_agent",
 ]
 
 const AGENT_DISPLAY_ORDER_INDEX = new Map<AgentType, number>(
@@ -959,12 +961,14 @@ export const ALL_AGENT_TYPES: BuiltinAgentType[] = [
   "deepseek",
   "qoder",
   "antigravity",
+  "generic_agent",
 ]
 
 export const MODEL_PROVIDER_AGENT_TYPES: BuiltinAgentType[] = [
   "claude_code",
   "codex",
   "gemini",
+  "generic_agent",
 ]
 
 /**
@@ -1270,6 +1274,7 @@ export const AGENT_LABELS: Record<BuiltinAgentType, string> = {
   deepseek: "DeepSeek Harness",
   qoder: "Qoder",
   antigravity: "Google Antigravity",
+  generic_agent: "GenericAgent",
 }
 
 export const AGENT_COLORS: Record<BuiltinAgentType, string> = {
@@ -1288,6 +1293,7 @@ export const AGENT_COLORS: Record<BuiltinAgentType, string> = {
   deepseek: "bg-[#4D6BFE]",
   qoder: "bg-[#6C4CF1]",
   antigravity: "bg-[#1A73E8]",
+  generic_agent: "bg-[#0F766E]",
 }
 
 // ACP connection status (matches Rust ConnectionStatus)

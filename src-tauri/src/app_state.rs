@@ -12,6 +12,7 @@ use crate::terminal::manager::TerminalManager;
 use crate::web::event_bridge::{EventEmitter, WebEventBroadcaster};
 use crate::web::WebServerState;
 use crate::workspace_transfer::WorkspaceTransferManager;
+use crate::forward_proxy::ForwardProxyManager;
 
 pub struct AppState {
     pub db: AppDatabase,
@@ -75,6 +76,8 @@ pub struct AppState {
     /// The upgrade UI subscribes to it and re-syncs from a snapshot on mount,
     /// so download progress survives settings-page navigation and reloads.
     pub update_state: crate::update::AppUpdateStateHandle,
+    /// codeg 特化: 转发代理 (形态 A 本地出口 / 形态 B 经远端 device 跳板)。
+    pub forward_proxy: Arc<ForwardProxyManager>,
 }
 
 pub fn default_system_op_lock() -> Arc<tokio::sync::Mutex<()>> {
@@ -247,6 +250,7 @@ impl AppState {
             chat_authoring_config,
             system_op_lock: default_system_op_lock(),
             update_state: default_update_state(),
+            forward_proxy: Arc::new(ForwardProxyManager::new()),
         }
     }
 }

@@ -1,7 +1,7 @@
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::NotSet, DatabaseConnection, EntityTrait, IntoActiveModel,
-    QueryOrder, Set,
+    ActiveModelTrait, ActiveValue::NotSet, ColumnTrait, DatabaseConnection, EntityTrait,
+    IntoActiveModel, QueryFilter, QueryOrder, Set,
 };
 
 use crate::db::entities::model_provider;
@@ -86,4 +86,54 @@ pub async fn list_all(conn: &DatabaseConnection) -> Result<Vec<model_provider::M
         .order_by_asc(model_provider::Column::Id)
         .all(conn)
         .await?)
+}
+
+// ===== codeg 特化: 按 name 幂等建/取 (claude_oauth 导入用) =====
+pub async fn find_by_name(
+    conn: &DatabaseConnection,
+    name: &str,
+) -> Result<Option<model_provider::Model>, DbError> {
+    Ok(model_provider::Entity::find()
+        .filter(model_provider::Column::Name.eq(name))
+        .one(conn)
+        .await?)
+}
+
+pub async fn ensure_by_name(
+    conn: &DatabaseConnection,
+    name: &str,
+    api_url: &str,
+    api_key: &str,
+    agent_type: &str,
+    model: &str,
+) -> Result<model_provider::Model, DbError> {
+    if let Some(existing) = find_by_name(conn, name).await? {
+        // 老 row 缺 model 字段时填回
+        if existing.model.as_deref().unwrap_or("").is_empty() && !model.is_empty() {
+            return update(
+                conn,
+                existing.id,
+                None,
+                None,
+                None,
+                None,
+                Some(Some(model.to_string())),
+            )
+            .await;
+        }
+        return Ok(existing);
+    }
+    create(
+        conn,
+        name.to_string(),
+        api_url.to_string(),
+        api_key.to_string(),
+        agent_type.to_string(),
+        if model.is_empty() {
+            None
+        } else {
+            Some(model.to_string())
+        },
+    )
+    .await
 }

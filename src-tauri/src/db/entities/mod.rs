@@ -24,3 +24,8 @@ pub mod work_task;
 pub mod work_task_event;
 pub mod work_task_settings;
 pub mod work_task_template;
+// codeg 特化 entity
+pub mod bookmark;
+pub mod device_service;
+pub mod forward_proxy_config;
+pub mod remote_device;

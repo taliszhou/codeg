@@ -36,6 +36,8 @@ pub enum AgentType {
     DeepSeek,
     Qoder,
     Antigravity,
+    /// codeg 独有: 本地 Python ACP bridge
+    GenericAgent,
     /// A user-registered ACP agent, identified by its ACP-registry id
     /// (interned). Ordered last so built-ins keep their relative order.
     Custom(&'static str),
@@ -60,6 +62,7 @@ pub const BUILTIN_AGENT_TYPES: &[AgentType] = &[
     AgentType::DeepSeek,
     AgentType::Qoder,
     AgentType::Antigravity,
+    AgentType::GenericAgent,
 ];
 
 impl AgentType {
@@ -107,6 +110,7 @@ impl AgentType {
             AgentType::DeepSeek => Cow::Borrowed("deepseek"),
             AgentType::Qoder => Cow::Borrowed("qoder"),
             AgentType::Antigravity => Cow::Borrowed("antigravity"),
+            AgentType::GenericAgent => Cow::Borrowed("genericagent-local"),
             AgentType::Custom(id) => Cow::Owned(format!("{CUSTOM_AGENT_WIRE_PREFIX}{id}")),
         }
     }
@@ -130,6 +134,7 @@ impl AgentType {
             "deepseek" => Some(AgentType::DeepSeek),
             "qoder" => Some(AgentType::Qoder),
             "antigravity" => Some(AgentType::Antigravity),
+            "genericagent-local" => Some(AgentType::GenericAgent),
             other => other
                 .strip_prefix(CUSTOM_AGENT_WIRE_PREFIX)
                 .and_then(AgentType::custom),
@@ -172,6 +177,7 @@ pub fn is_valid_custom_agent_id(id: &str) -> bool {
                 | "deepseek"
                 | "qoder"
                 | "antigravity"
+                | "genericagent-local"
         )
 }
 
@@ -203,6 +209,7 @@ impl fmt::Display for AgentType {
             AgentType::KimiCode => write!(f, "Kimi Code"),
             AgentType::Pi => write!(f, "Pi"),
             AgentType::Grok => write!(f, "Grok"),
+            AgentType::GenericAgent => write!(f, "GenericAgent"),
             AgentType::Cursor => write!(f, "Cursor"),
             AgentType::DeepSeek => write!(f, "DeepSeek Harness"),
             AgentType::Qoder => write!(f, "Qoder"),

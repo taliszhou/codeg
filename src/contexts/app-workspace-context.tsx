@@ -3,8 +3,12 @@
 import { useEffect, type ReactNode } from "react"
 import { getGitHead } from "@/lib/api"
 import { onTransportReconnect, subscribe } from "@/lib/platform"
+import { subscribeActiveDevice } from "@/lib/transport"
 import { useAcpEvent } from "@/contexts/acp-connections-context"
-import { useAppWorkspaceStore } from "@/stores/app-workspace-store"
+import {
+  resetAppWorkspaceStore,
+  useAppWorkspaceStore,
+} from "@/stores/app-workspace-store"
 import { useConversationRuntimeStore } from "@/stores/conversation-runtime-store"
 import { useTabStore } from "@/stores/tab-store"
 import {
@@ -50,6 +54,25 @@ export function AppWorkspaceProvider({ children }: AppWorkspaceProviderProps) {
     void fetchFolders()
     void refreshConversations()
   }, [])
+
+  // codeg: active device 切换时清空本地状态并重新 fetch
+  // (folder/conversation 来自不同 device)
+  useEffect(() => {
+    const unsub = subscribeActiveDevice(() => {
+      resetAppWorkspaceStore()
+      const { fetchFolders, refreshConversations } =
+        useAppWorkspaceStore.getState()
+      void fetchFolders()
+      void refreshConversations()
+    })
+    return unsub
+  }, [])
+
+  // ── Cross-client list/status sync ──────────────────────────────────────
+  // Tombstones for soft-deleted ids: a stale/out-of-order `upsert` that lands
+  // after a `deleted` (e.g. a concurrent rename racing a delete from another
+  // client) must not resurrect the row. Ids are DB autoincrement and never
+  // reused, so the tombstone is permanent; the set is FIFO-bounded.
 
   // Subscribe to the global `conversation://changed` side-channel so any
   // client's create/rename/delete/status reaches this client's sidebar in real

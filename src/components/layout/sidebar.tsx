@@ -26,6 +26,7 @@ import {
   SidebarConversationList,
   type SidebarConversationListHandle,
 } from "@/components/conversations/sidebar-conversation-list"
+import { DeviceSwitcher } from "@/components/layout/device-switcher"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -484,6 +485,11 @@ export function Sidebar() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      </div>
+
+      {/* codeg: 设备切换器 (本机 / 远端) */}
+      <div className="shrink-0 border-b border-border px-2 py-1.5">
+        <DeviceSwitcher />
       </div>
 
       {/* Fixed actions above the scrollable list. `shrink-0` keeps them pinned —

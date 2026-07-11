@@ -1012,6 +1012,10 @@ pub fn build_router(
             post(handlers::experts::experts_link_to_agent),
         )
         .route(
+            "/experts_list_for_agent",
+            post(handlers::experts::experts_list_for_agent),
+        )
+        .route(
             "/experts_apply_links",
             post(handlers::experts::experts_apply_links),
         )
@@ -1677,6 +1681,111 @@ pub fn build_router(
         )
         .route("/terminal_kill", post(handlers::terminal::terminal_kill))
         .route("/terminal_list", post(handlers::terminal::terminal_list))
+        // ─── M7: Local NPU LLM (MediaPipe) ───
+        .route("/local_npu_list_models", post(handlers::local_npu::list_models))
+        .route("/local_npu_download_model", post(handlers::local_npu::download_model))
+        .route("/local_npu_download_status", post(handlers::local_npu::download_status))
+        .route("/local_npu_delete_model", post(handlers::local_npu::delete_model))
+        .route("/local_npu_load_model", post(handlers::local_npu::load_model))
+        .route("/local_npu_unload_model", post(handlers::local_npu::unload_model))
+        .route("/local_npu_health", post(handlers::local_npu::health))
+        .route("/local_npu_chat_test", post(handlers::local_npu::chat_test))
+        .route("/claude_oauth_import", post(handlers::claude_oauth::import_creds))
+        // ─── Phase 2 / C1: Remote Devices ───
+        .route(
+            "/list_remote_devices",
+            post(handlers::remote_device::list_remote_devices),
+        )
+        .route(
+            "/get_remote_device",
+            post(handlers::remote_device::get_remote_device),
+        )
+        .route(
+            "/create_remote_device",
+            post(handlers::remote_device::create_remote_device),
+        )
+        .route(
+            "/update_remote_device",
+            post(handlers::remote_device::update_remote_device),
+        )
+        .route(
+            "/delete_remote_device",
+            post(handlers::remote_device::delete_remote_device),
+        )
+        .route(
+            "/reorder_remote_devices",
+            post(handlers::remote_device::reorder_remote_devices),
+        )
+        .route(
+            "/test_remote_device",
+            post(handlers::remote_device::test_remote_device),
+        )
+        // 远程透传: /api/remote/{device_id}/api/{*path}
+        .route(
+            "/remote/{device_id}/api/{*path}",
+            axum::routing::any(handlers::remote_device::http_proxy),
+        )
+        .route(
+            "/remote/{device_id}/ws/events",
+            get(handlers::remote_device::ws_proxy),
+        )
+        // ─── Phase 3 / C3: HTTP Forward Proxy ───
+        .route(
+            "/get_forward_proxy_status",
+            post(handlers::forward_proxy::get_forward_proxy_status),
+        )
+        .route(
+            "/update_forward_proxy",
+            post(handlers::forward_proxy::update_forward_proxy),
+        )
+        .route(
+            "/regenerate_forward_proxy_token",
+            post(handlers::forward_proxy::regenerate_forward_proxy_token),
+        )
+        // ─── Phase 4a / 内置浏览器 ───
+        .route("/browse", get(handlers::web_browser::browse))
+        .route(
+            "/_internal_browse",
+            get(handlers::web_browser::internal_browse),
+        )
+        .route("/list_bookmarks", post(handlers::web_browser::list_bookmarks))
+        .route("/upsert_bookmark", post(handlers::web_browser::upsert_bookmark))
+        .route("/delete_bookmark", post(handlers::web_browser::delete_bookmark))
+        .route(
+            "/reorder_bookmarks",
+            post(handlers::web_browser::reorder_bookmarks),
+        )
+        // ─── Phase 6 / Trace ───
+        .route(
+            "/list_proxy_traces",
+            post(handlers::proxy_trace::list_proxy_traces),
+        )
+        // ─── Phase 4b / 跳板 internal endpoints (远端 server 提供, 给源 forward proxy 调) ───
+        .route(
+            "/_internal_tunnel",
+            get(handlers::internal_tunnel::internal_tunnel),
+        )
+        .route(
+            "/_internal_http_proxy",
+            post(handlers::internal_tunnel::internal_http_proxy),
+        )
+        // ─── Phase 5 / 设备服务清单 ───
+        .route(
+            "/list_device_services",
+            post(handlers::device_service::list_device_services),
+        )
+        .route(
+            "/create_device_service",
+            post(handlers::device_service::create_device_service),
+        )
+        .route(
+            "/update_device_service",
+            post(handlers::device_service::update_device_service),
+        )
+        .route(
+            "/delete_device_service",
+            post(handlers::device_service::delete_device_service),
+        )
         // Catch-all
         .fallback(api_not_found)
         .layer(middleware::from_fn(move |req, next| {

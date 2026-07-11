@@ -3280,6 +3280,7 @@ pub fn read_servers_for_agent_type(
         // `mcpServers`); codeg deliberately knows nothing about their native
         // config files, so there is no per-agent store to read back here.
         AgentType::Custom(_) => Ok(BTreeMap::new()),
+        AgentType::GenericAgent => Ok(BTreeMap::new()),
     }
 }
 

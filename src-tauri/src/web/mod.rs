@@ -341,16 +341,30 @@ pub(crate) fn find_static_dir_tauri(app: &tauri::AppHandle) -> PathBuf {
 }
 
 pub(crate) fn find_static_dir_fallback() -> PathBuf {
-    // Dev mode: "out/" is at the project root, which is one level above src-tauri/.
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let project_out = manifest_dir.parent().map(|p| p.join("out"));
-    if let Some(ref out) = project_out {
+    let project_root = manifest_dir.parent();
+
+    // codeg layout: web/out/ lives under the project root
+    if let Some(root) = project_root {
+        let web_out = root.join("web").join("out");
+        if web_out.join("index.html").exists() {
+            tracing::info!(
+                "[WEB] Serving static files from project web/out/: {}",
+                web_out.display()
+            );
+            return web_out;
+        }
+    }
+
+    // upstream/legacy layout: out/ at project root
+    if let Some(root) = project_root {
+        let out = root.join("out");
         if out.join("index.html").exists() {
             tracing::info!(
                 "[WEB] Serving static files from project out/: {}",
                 out.display()
             );
-            return out.clone();
+            return out;
         }
     }
 

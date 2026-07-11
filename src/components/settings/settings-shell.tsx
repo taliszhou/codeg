@@ -8,6 +8,9 @@ import {
   type ReactNode,
 } from "react"
 import {
+  ActivitySquare,
+  Cpu,
+  Network,
   Bot,
   BookOpenText,
   Boxes,
@@ -53,6 +56,10 @@ interface SettingsNavItem {
     | "system"
     | "web_service"
     | "logs"
+    | "local_models"
+    | "remote_devices"
+    | "forward_proxy"
+    | "proxy_trace"
   icon: ComponentType<{ className?: string }>
 }
 
@@ -116,6 +123,26 @@ const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     href: "/settings/web-service",
     labelKey: "web_service",
     icon: Globe,
+  },
+  {
+    href: "/settings/local-models",
+    labelKey: "local_models",
+    icon: Cpu,
+  },
+  {
+    href: "/settings/remote-devices",
+    labelKey: "remote_devices",
+    icon: Network,
+  },
+  {
+    href: "/settings/forward-proxy",
+    labelKey: "forward_proxy",
+    icon: Globe,
+  },
+  {
+    href: "/settings/proxy-trace",
+    labelKey: "proxy_trace",
+    icon: ActivitySquare,
   },
   {
     href: "/settings/logs",

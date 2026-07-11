@@ -58,7 +58,73 @@ export function getActiveRemoteConnectionId(): number | null {
 }
 
 export function getTransport(): Transport {
+  // codeg: 优先跟 active device 走 (workspace 路由切换到远端设备时),
+  // 否则回退上游 remote-desktop / 本机 shell。
+  const deviceId = getActiveDeviceId()
+  if (deviceId != null) return getRemoteTransport(deviceId)
   return _remoteTransport ?? getShellTransport()
+}
+
+/** codeg: 强制拿本机 transport, 忽略当前 active device — 用于固定本机的 API
+ * (如远程设备 CRUD 本身、本地 NPU)。*/
+export function getLocalTransport(): Transport {
+  return getShellTransport()
+}
+
+// ===== codeg: 多设备 active-device 切换 (localStorage + /api/remote/{id}/ 代理) =====
+const ACTIVE_DEVICE_KEY = "codeg_active_device_id"
+const ACTIVE_DEVICE_EVENT = "codeg:active-device-changed"
+const _deviceTransports = new Map<number, Transport>()
+
+function buildDeviceTransport(deviceId: number): Transport {
+  const cached = _deviceTransports.get(deviceId)
+  if (cached) return cached
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { RemoteWebTransport } = require("./remote-web-transport") as {
+    RemoteWebTransport: new (baseUrl: string, deviceId: number) => Transport
+  }
+  const t = new RemoteWebTransport(window.location.origin, deviceId)
+  _deviceTransports.set(deviceId, t)
+  return t
+}
+
+/** 读当前 active device id (仅 /workspace 路由生效, 其它路径恒走本机)。*/
+export function getActiveDeviceId(): number | null {
+  if (typeof window === "undefined") return null
+  if (!window.location.pathname.startsWith("/workspace")) return null
+  const raw = window.localStorage.getItem(ACTIVE_DEVICE_KEY)
+  if (!raw) return null
+  const n = parseInt(raw, 10)
+  return isNaN(n) || n < 1 ? null : n
+}
+
+/** 设置 active device (null = 本机)。广播事件让组件刷新数据。*/
+export function setActiveDeviceId(deviceId: number | null) {
+  if (typeof window === "undefined") return
+  if (deviceId == null) {
+    window.localStorage.removeItem(ACTIVE_DEVICE_KEY)
+  } else {
+    window.localStorage.setItem(ACTIVE_DEVICE_KEY, String(deviceId))
+  }
+  window.dispatchEvent(new CustomEvent(ACTIVE_DEVICE_EVENT, { detail: { deviceId } }))
+}
+
+/** 订阅 active device 变化, 返回取消函数。*/
+export function subscribeActiveDevice(
+  handler: (deviceId: number | null) => void
+): () => void {
+  if (typeof window === "undefined") return () => {}
+  const listener = (e: Event) => {
+    const detail = (e as CustomEvent).detail as { deviceId: number | null }
+    handler(detail?.deviceId ?? null)
+  }
+  window.addEventListener(ACTIVE_DEVICE_EVENT, listener)
+  return () => window.removeEventListener(ACTIVE_DEVICE_EVENT, listener)
+}
+
+/** 显式拿某 device 的 transport。*/
+export function getRemoteTransport(deviceId: number): Transport {
+  return buildDeviceTransport(deviceId)
 }
 
 export function isDesktop(): boolean {

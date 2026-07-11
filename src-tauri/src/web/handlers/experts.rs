@@ -91,3 +91,17 @@ pub async fn experts_open_central_dir() -> Result<Json<String>, AppCommandError>
         .map_err(|e| AppCommandError::task_execution_failed(e.to_string()))?;
     Ok(Json(result))
 }
+
+#[derive(serde::Deserialize)]
+pub struct AgentTypeOnlyParams {
+    pub agent_type: crate::models::agent::AgentType,
+}
+
+pub async fn experts_list_for_agent(
+    Json(params): Json<AgentTypeOnlyParams>,
+) -> Result<Json<Vec<ExpertListItem>>, AppCommandError> {
+    let result = experts_commands::experts_list_for_agent(params.agent_type)
+        .await
+        .map_err(|e| AppCommandError::task_execution_failed(e.to_string()))?;
+    Ok(Json(result))
+}

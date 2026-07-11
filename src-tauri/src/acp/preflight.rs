@@ -100,6 +100,7 @@ pub async fn run_preflight(agent_type: AgentType) -> PreflightResult {
             system_cmd,
             ..
         } => check_uv_environment(*uv_required, *system_cmd).await,
+        AgentDistribution::Local { .. } => check_genericagent_environment().await,
     };
 
     let passed = checks
@@ -694,6 +695,47 @@ async fn check_binary_environment(
     }
 
     checks
+}
+
+/// codeg: GenericAgent 本地 Python ACP bridge 的环境检查。上游 run_preflight 的
+/// `AgentDistribution::Local` 分支调用它，故在本文件保留实现。
+async fn check_genericagent_environment() -> Vec<CheckItem> {
+    let python = registry::find_genericagent_python();
+    let bridge = registry::find_genericagent_bridge();
+    vec![
+        match python {
+            Some(ref cmd) => CheckItem {
+                check_id: "python_available".into(),
+                label: "Python".into(),
+                status: CheckStatus::Pass,
+                message: format!("Python available at {cmd}"),
+                fixes: vec![],
+            },
+            None => CheckItem {
+                check_id: "python_available".into(),
+                label: "Python".into(),
+                status: CheckStatus::Fail,
+                message: "Python is not installed or not in PATH".into(),
+                fixes: vec![],
+            },
+        },
+        match bridge {
+            Some(path) => CheckItem {
+                check_id: "bridge_available".into(),
+                label: "GenericAgent ACP bridge".into(),
+                status: CheckStatus::Pass,
+                message: format!("Bridge found at {}", path.display()),
+                fixes: vec![],
+            },
+            None => CheckItem {
+                check_id: "bridge_available".into(),
+                label: "GenericAgent ACP bridge".into(),
+                status: CheckStatus::Fail,
+                message: "genericagent_acp_bridge.py not found. See https://github.com/yiqi-017/GenericAgent-codeg/tree/feat/acp-bridge for setup instructions.".into(),
+                fixes: vec![],
+            },
+        },
+    ]
 }
 
 #[cfg(test)]

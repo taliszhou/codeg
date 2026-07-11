@@ -53,6 +53,10 @@ pub enum AgentDistribution {
         /// install`, an official installer) launch it without `uv`.
         system_cmd: Option<(&'static str, &'static [&'static str])>,
     },
+    /// 本地 Python ACP bridge (GenericAgent), 无 native binary。
+    Local {
+        version: &'static str,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -142,7 +146,8 @@ impl AcpAgentMeta {
         match &self.distribution {
             AgentDistribution::Npx { version, .. }
             | AgentDistribution::Binary { version, .. }
-            | AgentDistribution::Uvx { version, .. } => Some(*version),
+            | AgentDistribution::Uvx { version, .. }
+            | AgentDistribution::Local { version } => Some(*version),
         }
     }
 
@@ -243,6 +248,7 @@ pub fn builtin_acp_agents() -> Vec<AgentType> {
         AgentType::DeepSeek,
         AgentType::Qoder,
         AgentType::Antigravity,
+        AgentType::GenericAgent,
     ]
 }
 
@@ -273,6 +279,7 @@ pub fn registry_id_for(agent_type: AgentType) -> &'static str {
         AgentType::Antigravity => "antigravity-acp",
         // A custom agent's registry id IS its identity.
         AgentType::Custom(id) => id,
+        AgentType::GenericAgent => "genericagent-local",
     }
 }
 
@@ -293,6 +300,7 @@ pub fn from_registry_id(id: &str) -> Option<AgentType> {
         "deepseek-acp" => Some(AgentType::DeepSeek),
         "qoder-cli" => Some(AgentType::Qoder),
         "antigravity-acp" => Some(AgentType::Antigravity),
+        "genericagent-local" => Some(AgentType::GenericAgent),
         // Only ids the user has actually registered resolve. An unregistered
         // id must stay `None` so the ACP-registry picker still offers it as
         // "addable" rather than treating it as already supported.
@@ -1125,6 +1133,13 @@ pub fn get_agent_meta(agent_type: AgentType) -> AcpAgentMeta {
                 env: &[],
                 node_required: Some("22.0.0"),
             },
+        },
+        AgentType::GenericAgent => AcpAgentMeta {
+            agent_type,
+            supports_mcp: true,
+            name: "GenericAgent",
+            description: "Local ACP bridge for the GenericAgent Python project",
+            distribution: AgentDistribution::Local { version: "0.1.0" },
         },
         AgentType::OpenCode => AcpAgentMeta {
             agent_type,
@@ -2179,4 +2194,75 @@ mod tests {
             );
         }
     }
+}
+
+// ===== GenericAgent 本地 Python ACP bridge 定位 =====
+use std::path::{Path, PathBuf};
+
+pub fn genericagent_bridge_override() -> Option<PathBuf> {
+    std::env::var_os("CODEG_GENERICAGENT_BRIDGE").map(PathBuf::from)
+}
+
+/// 推 GenericAgent 项目根目录: 通过已找到的 bridge 脚本反向定位。
+/// 用于写 mykey.py 等 GenericAgent 配置文件。
+pub fn find_genericagent_root() -> Option<PathBuf> {
+    let bridge = find_genericagent_bridge()?;
+    let mut cur: Option<&Path> = bridge.parent();
+    while let Some(dir) = cur {
+        if dir.file_name().and_then(|s| s.to_str()) == Some("GenericAgent") {
+            return Some(dir.to_path_buf());
+        }
+        cur = dir.parent();
+    }
+    None
+}
+
+pub fn find_genericagent_bridge() -> Option<PathBuf> {
+    if let Some(path) = genericagent_bridge_override() {
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    let candidates = [
+        Path::new("GenericAgent")
+            .join("frontends")
+            .join("genericagent_acp_bridge.py"),
+        Path::new("GenericAgent").join("genericagent_acp_bridge.py"),
+    ];
+    let mut roots = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            roots.push(dir.to_path_buf());
+        }
+    }
+
+    for root in roots {
+        for base in root.ancestors() {
+            for rel in &candidates {
+                let candidate = base.join(rel);
+                if candidate.is_file() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+    None
+}
+
+pub fn find_genericagent_python() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    let candidates = ["py", "python"];
+    #[cfg(not(target_os = "windows"))]
+    let candidates = ["python3", "python"];
+
+    for cmd in candidates {
+        if let Ok(path) = which::which(cmd) {
+            return Some(path.to_string_lossy().to_string());
+        }
+    }
+    None
 }

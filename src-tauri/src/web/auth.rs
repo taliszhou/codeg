@@ -18,6 +18,16 @@ fn token_from_ws_protocols(value: &str) -> Option<String> {
         .and_then(|bytes| String::from_utf8(bytes).ok())
 }
 
+// Browser WebSocket can't set an Authorization header; the remote-device proxy
+// forwards the token as `?token=`. Accept it so proxied WS upgrades auth.
+fn token_from_query(query: &str) -> Option<String> {
+    query
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("token="))
+        .and_then(|encoded| urlencoding::decode(encoded).ok())
+        .map(|decoded| decoded.into_owned())
+}
+
 pub async fn require_token(request: Request, next: Next, token: String) -> Response {
     // Fail closed on a misconfigured empty token: otherwise `Bearer ` (an empty
     // bearer value) would match it and silently disable authentication.
@@ -38,6 +48,12 @@ pub async fn require_token(request: Request, next: Next, token: String) -> Respo
             if token_from_ws_protocols(protocols).is_some_and(|t| t == token) {
                 return next.run(request).await;
             }
+        }
+    }
+
+    if let Some(query) = request.uri().query() {
+        if token_from_query(query).is_some_and(|t| t == token) {
+            return next.run(request).await;
         }
     }
 
@@ -62,5 +78,18 @@ mod tests {
     #[test]
     fn ignores_invalid_ws_protocol_token() {
         assert!(token_from_ws_protocols("codeg-events, codeg-token.not-valid-@@@@").is_none());
+    }
+
+    #[test]
+    fn parses_token_from_query() {
+        assert_eq!(
+            token_from_query("token=secret%2Ftoken%2Bvalue").as_deref(),
+            Some("secret/token+value")
+        );
+        assert_eq!(
+            token_from_query("foo=1&token=abc&bar=2").as_deref(),
+            Some("abc")
+        );
+        assert!(token_from_query("foo=1&bar=2").is_none());
     }
 }

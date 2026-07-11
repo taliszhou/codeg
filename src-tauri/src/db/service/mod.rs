@@ -19,3 +19,8 @@ pub mod tab_service;
 pub mod thread_binding_service;
 pub mod token_usage_service;
 pub mod work_task_service;
+// codeg 特化 service
+pub mod bookmark_service;
+pub mod device_service_service;
+pub mod forward_proxy_service;
+pub mod remote_device_service;

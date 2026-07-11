@@ -120,6 +120,8 @@ export interface FileWorkspaceTab {
 // stable for the provider's lifetime; layout chrome subscribes to
 // WorkspaceViewContext, which only changes on mode/pane/maximize flips.
 interface WorkspaceActionsValue {
+  /** codeg: 浏览器模式覆盖层 (独立于上游 derived mode, 全屏覆盖 workspace) */
+  setBrowserMode: (on: boolean) => void
   setActivePane: (pane: WorkspacePane) => void
   activateConversationPane: () => void
   activateFilePane: () => void
@@ -224,6 +226,8 @@ interface WorkspaceViewValue {
   mode: WorkspaceMode
   activePane: WorkspacePane
   filesMaximized: boolean
+  /** codeg: 浏览器模式覆盖层 (独立于上游 derived mode, 全屏覆盖 workspace) */
+  browserMode: boolean
 }
 
 interface WorkspaceFileTabsValue {
@@ -419,6 +423,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   const selfWriteEchoRef = useRef<Map<string, { etag: string; at: number }>>(
     new Map()
   )
+  const [browserMode, setBrowserMode] = useState(false)
   const fileTabsRef = useRef<FileWorkspaceTab[]>([])
   // Latest-state mirrors for the stable action callbacks. Actions live in a
   // context value that must NOT change identity when tabs/folder change, so
@@ -2574,6 +2579,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   // changes (which none do after mount).
   const actions = useMemo<WorkspaceActionsValue>(
     () => ({
+      setBrowserMode,
       setActivePane,
       activateConversationPane,
       activateFilePane,
@@ -2602,6 +2608,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
       toggleFilesMaximized,
     }),
     [
+      setBrowserMode,
       setActivePane,
       activateConversationPane,
       activateFilePane,
@@ -2636,8 +2643,9 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
       mode,
       activePane,
       filesMaximized: effectiveFilesMaximized,
+      browserMode,
     }),
-    [mode, activePane, effectiveFilesMaximized]
+    [mode, activePane, effectiveFilesMaximized, browserMode]
   )
 
   const fileTabsValue = useMemo<WorkspaceFileTabsValue>(

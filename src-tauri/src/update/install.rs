@@ -813,13 +813,15 @@ fn exchange_dirs(a: &Path, b: &Path) -> std::io::Result<()> {
         let ret = unsafe {
             #[cfg(target_os = "linux")]
             {
-                libc::renameat2(
+                // musl libc 未暴露 renameat2 包装函数, 直接走 syscall。
+                libc::syscall(
+                    libc::SYS_renameat2,
                     libc::AT_FDCWD,
                     ca.as_ptr(),
                     libc::AT_FDCWD,
                     cb.as_ptr(),
                     libc::RENAME_EXCHANGE,
-                )
+                ) as libc::c_int
             }
             #[cfg(target_os = "macos")]
             {

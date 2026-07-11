@@ -1,5 +1,6 @@
 import {
   getActiveRemoteConnectionId,
+  getLocalTransport,
   getShellTransport,
   getTransport,
   isDesktop,
@@ -1467,6 +1468,13 @@ export async function acpDeleteAgentSkill(params: {
 
 export async function expertsList(): Promise<ExpertListItem[]> {
   return getTransport().call("experts_list")
+}
+
+// codeg: 按 agent 列出关联的 experts
+export async function expertsListForAgent(
+  agentType: AgentType
+): Promise<ExpertListItem[]> {
+  return getTransport().call("experts_list_for_agent", { agentType })
 }
 
 export async function expertsGetInstallStatus(
@@ -5863,4 +5871,276 @@ export async function forgeSettingsSet(
   settings: ForgePanelSettings | null
 ): Promise<ForgeSettingsStore> {
   return getTransport().call("forge_settings_set", { folderId, settings })
+export interface LocalNpuModelCatalog {
+  models: LocalNpuModelEntry[]
+  active_model_id: string | null
+}
+
+export interface LocalNpuDownloadTaskState {
+  task_id: string
+  model_id: string
+  total_bytes: number
+  downloaded_bytes: number
+  status: "downloading" | "completed" | "error" | "cancelled"
+  error: string | null
+}
+
+export async function listLocalNpuModels(): Promise<LocalNpuModelCatalog> {
+  return getTransport().call("local_npu_list_models")
+}
+
+export async function downloadLocalNpuModel(modelId: string): Promise<{ task_id: string }> {
+  return getTransport().call("local_npu_download_model", { modelId })
+}
+
+export async function getLocalNpuDownloadStatus(taskId: string): Promise<LocalNpuDownloadTaskState> {
+  return getTransport().call("local_npu_download_status", { taskId })
+}
+
+export async function deleteLocalNpuModel(modelId: string): Promise<{ deleted: string }> {
+  return getTransport().call("local_npu_delete_model", { modelId })
+}
+
+export async function loadLocalNpuModel(modelId: string): Promise<{ loaded: string; previous?: string; elapsed_ms: number }> {
+  return getTransport().call("local_npu_load_model", { modelId })
+}
+
+export async function unloadLocalNpuModel(): Promise<{ unloaded?: string }> {
+  return getTransport().call("local_npu_unload_model")
+}
+
+export async function localNpuHealth(): Promise<{ ok: boolean; socket_path: string }> {
+  return getTransport().call("local_npu_health")
+}
+
+export interface LocalNpuChatTestResult {
+  modelId: string
+  servedModel: string
+  prompt: string
+  reply: string
+  elapsedMs: number
+}
+
+export async function chatTestLocalNpu(
+  modelId: string,
+  prompt?: string,
+): Promise<LocalNpuChatTestResult> {
+  return getTransport().call("local_npu_chat_test", { modelId, prompt })
+}
+
+export interface ClaudeOauthImportResult {
+  written: string
+  providerId: number
+  providerName: string
+}
+
+export async function importClaudeOauth(payload: {
+  credentialsJson: string
+  apiUrl?: string
+  providerName?: string
+}): Promise<ClaudeOauthImportResult> {
+  return getTransport().call("claude_oauth_import", payload)
+}
+
+// ─── Phase 2 / C1: Remote Devices ───
+// 关键: 远程设备的 CRUD/test 永远走本机 transport (不能跟着 active device 走,
+// 否则切到远端后看到的是远端机器的 device 列表,不是本机的)。
+
+
+export interface RemoteDeviceMasked {
+  id: number
+  name: string
+  base_url: string
+  token_masked: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface RemoteDeviceTestResult {
+  ok: boolean
+  status: number | null
+  message: string | null
+}
+
+export async function listRemoteDevices(): Promise<RemoteDeviceMasked[]> {
+  return getLocalTransport().call("list_remote_devices")
+}
+
+export async function getRemoteDevice(id: number): Promise<RemoteDeviceMasked> {
+  return getLocalTransport().call("get_remote_device", { id })
+}
+
+export async function createRemoteDevice(payload: {
+  name: string
+  baseUrl: string
+  token: string
+}): Promise<RemoteDeviceMasked> {
+  return getLocalTransport().call("create_remote_device", payload)
+}
+
+export async function updateRemoteDevice(payload: {
+  id: number
+  name: string
+  baseUrl: string
+  token: string
+}): Promise<RemoteDeviceMasked> {
+  return getLocalTransport().call("update_remote_device", payload)
+}
+
+export async function deleteRemoteDevice(id: number): Promise<void> {
+  return getLocalTransport().call("delete_remote_device", { id })
+}
+
+export async function reorderRemoteDevices(ids: number[]): Promise<void> {
+  return getLocalTransport().call("reorder_remote_devices", { ids })
+}
+
+export async function testRemoteDevice(payload: {
+  baseUrl: string
+  token: string
+}): Promise<RemoteDeviceTestResult> {
+  return getLocalTransport().call("test_remote_device", payload)
+}
+
+// ─── Phase 3 / C3: HTTP Forward Proxy ───
+
+export interface ForwardProxyStatus {
+  enabled: boolean
+  running: boolean
+  listenPort: number
+  runningPort: number | null
+  token: string
+  upstreamDeviceId: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function getForwardProxyStatus(): Promise<ForwardProxyStatus> {
+  return getLocalTransport().call("get_forward_proxy_status")
+}
+
+export async function updateForwardProxy(payload: {
+  enabled: boolean
+  listenPort: number
+  /** null = 本机出口; 数字 = 经此 device 跳板; undefined = 不变 */
+  upstreamDeviceId?: number | null
+}): Promise<ForwardProxyStatus> {
+  return getLocalTransport().call("update_forward_proxy", payload)
+}
+
+export async function regenerateForwardProxyToken(): Promise<ForwardProxyStatus> {
+  return getLocalTransport().call("regenerate_forward_proxy_token")
+}
+
+// ─── Phase 4a / 内置浏览器 + 收藏夹 ───
+
+export interface BookmarkInfo {
+  id: number
+  title: string
+  url: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export async function listBookmarks(): Promise<BookmarkInfo[]> {
+  return getLocalTransport().call("list_bookmarks")
+}
+
+export async function upsertBookmark(payload: {
+  id?: number
+  title: string
+  url: string
+}): Promise<BookmarkInfo> {
+  return getLocalTransport().call("upsert_bookmark", payload)
+}
+
+export async function deleteBookmark(id: number): Promise<void> {
+  return getLocalTransport().call("delete_bookmark", { id })
+}
+
+export async function reorderBookmarks(ids: number[]): Promise<void> {
+  return getLocalTransport().call("reorder_bookmarks", { ids })
+}
+
+// ─── Phase 5 / Device Services ───
+
+export interface DeviceServiceInfo {
+  id: number
+  device_id: number
+  name: string
+  url: string
+  sort_order: number
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export async function listDeviceServices(deviceId: number): Promise<DeviceServiceInfo[]> {
+  return getLocalTransport().call("list_device_services", { deviceId })
+}
+
+export async function createDeviceService(payload: {
+  deviceId: number
+  name: string
+  url: string
+}): Promise<DeviceServiceInfo> {
+  return getLocalTransport().call("create_device_service", payload)
+}
+
+export async function updateDeviceService(payload: {
+  id: number
+  name?: string
+  url?: string
+  enabled?: boolean
+}): Promise<DeviceServiceInfo> {
+  return getLocalTransport().call("update_device_service", payload)
+}
+
+export async function deleteDeviceService(id: number): Promise<void> {
+  return getLocalTransport().call("delete_device_service", { id })
+}
+
+// ─── Phase 6 / Proxy Trace ───
+
+export interface ProxyTraceEntry {
+  tsMs: number
+  label: string
+  method: string
+  upstream: string
+  status: number | null
+  elapsedMs: number
+  bytesIn: number
+  bytesOut: number
+  error: string | null
+}
+
+export async function listProxyTraces(limit?: number): Promise<ProxyTraceEntry[]> {
+  return getLocalTransport().call("list_proxy_traces", { limit })
+}
+
+/**
+ * 拼装 `/api/browse?url=X&via=N` 的 iframe src URL。
+ * 加上 token (浏览器请求带不上 Authorization header, 用 query)
+ */
+export function buildBrowseUrl(targetUrl: string, deviceId: number | null): string {
+  const token = typeof window !== "undefined"
+    ? window.localStorage.getItem("codeg_token") ?? ""
+    : ""
+  const base = `/api/browse?url=${encodeURIComponent(targetUrl)}&token=${encodeURIComponent(token)}`
+  return deviceId != null ? `${base}&via=${deviceId}` : base
+}
+
+// codeg: 本地 NPU 模型条目 (LocalNpuModelCatalog 依赖)
+export interface LocalNpuModelEntry {
+  id: string
+  display_name: string
+  description: string
+  size_bytes: number
+  estimated_tok_per_sec: number
+  url: string
+  downloaded: boolean
+  file_path: string | null
+  active: boolean
 }

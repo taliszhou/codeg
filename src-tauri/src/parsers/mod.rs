@@ -16,6 +16,8 @@ pub mod opencode;
 pub mod pi;
 pub mod qoder;
 mod summary_cache;
+// codeg 独有: 本地 GenericAgent ACP bridge transcript parser
+pub mod genericagent;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -306,6 +308,7 @@ pub fn build_agent_parser(agent_type: AgentType) -> Box<dyn AgentParser> {
         AgentType::DeepSeek => Box::new(deepseek::DeepSeekParser::new()),
         AgentType::Qoder => Box::new(qoder::QoderParser::new()),
         AgentType::Antigravity => Box::new(antigravity::AntigravityParser::new()),
+        AgentType::GenericAgent => Box::new(genericagent::GenericAgentParser::new()),
         // Custom ACP agents have no native store to reverse-engineer; their
         // history is codeg's own ACP transcript.
         AgentType::Custom(_) => Box::new(acp_native::AcpNativeParser::new(agent_type)),

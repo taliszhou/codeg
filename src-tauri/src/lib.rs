@@ -46,6 +46,10 @@ pub mod web;
 pub mod work_task;
 pub mod workspace_state;
 pub mod workspace_transfer;
+// 本地 NPU / 转发代理 / 反向隧道
+pub mod llm;
+pub mod proxy;
+pub mod forward_proxy;
 
 /// Sweep stale ACP binary cache trash created by the rename-aside fallback in
 /// `acp::binary_cache::clear_agent_cache`. Safe to call any time; intended to

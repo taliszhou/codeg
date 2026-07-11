@@ -144,6 +144,10 @@ pub async fn create_model_provider_core(
         model_provider_service::create(&db.conn, name, api_url, api_key, agent_type, model)
             .await
             .map_err(AppCommandError::from)?;
+    // codeg: 重写 GenericAgent mykey.py 反映最新 providers
+    if let Err(e) = acp::resync_generic_agent_mykey(&db.conn).await {
+        eprintln!("[ModelProvider] resync_generic_agent_mykey after create failed: {e}");
+    }
     Ok(ModelProviderInfo::from(model_row))
 }
 
@@ -242,6 +246,11 @@ pub async fn update_model_provider_core(
         .map_err(|e| AppCommandError::invalid_input(e.to_string()))?;
     }
 
+    // codeg: 重写 GenericAgent mykey.py 反映最新 providers
+    if let Err(e) = acp::resync_generic_agent_mykey(&db.conn).await {
+        eprintln!("[ModelProvider] resync_generic_agent_mykey after update failed: {e}");
+    }
+
     Ok(ModelProviderInfo::from(model_row))
 }
 
@@ -325,6 +334,10 @@ pub async fn delete_model_provider_core(db: &AppDatabase, id: i32) -> Result<(),
     model_provider_service::delete(&db.conn, id)
         .await
         .map_err(AppCommandError::from)?;
+    // codeg: 重写 GenericAgent mykey.py 移除该 provider
+    if let Err(e) = acp::resync_generic_agent_mykey(&db.conn).await {
+        eprintln!("[ModelProvider] resync_generic_agent_mykey after delete failed: {e}");
+    }
     Ok(())
 }
 

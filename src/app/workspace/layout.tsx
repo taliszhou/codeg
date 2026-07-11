@@ -58,6 +58,7 @@ import { RemoteConnectionGate } from "@/contexts/remote-connection-context"
 import { UpdateProvider } from "@/components/providers/update-provider"
 import { useWorkspaceBackground, useZoomLevel } from "@/hooks/use-appearance"
 import { FILL_MODE_STYLE } from "@/lib/workspace-background"
+import { BrowserView } from "@/components/browser/browser-view"
 import { TabBar } from "@/components/tabs/tab-bar"
 import { TerminalPanel } from "@/components/terminal/terminal-panel"
 import { AuxPanel } from "@/components/layout/aux-panel"
@@ -245,7 +246,7 @@ function KeptMountedSurface({
 }
 
 function WorkspaceContent({ children }: { children: React.ReactNode }) {
-  const { mode, filesMaximized } = useWorkspaceView()
+  const { mode, filesMaximized, browserMode } = useWorkspaceView()
   const { setActivePane } = useWorkspaceActions()
   const panelGroupRef = useRef<ImperativePanelGroupHandle | null>(null)
   const fusionLayoutRef = useRef<[number, number]>(DEFAULT_FUSION_LAYOUT)
@@ -337,6 +338,11 @@ function WorkspaceContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative h-full min-h-0 overflow-hidden">
+      {browserMode && (
+        <div className="absolute inset-0 z-50 bg-background">
+          <BrowserView />
+        </div>
+      )}
       <KeptMountedSurface hidden={!isConversations}>
         <ResizablePanelGroup
           id={WORKSPACE_PANEL_GROUP_ID}
@@ -569,7 +575,7 @@ function WorkspaceContent({ children }: { children: React.ReactNode }) {
 }
 
 function MobileWorkspaceContent({ children }: { children: React.ReactNode }) {
-  const { mode, activePane } = useWorkspaceView()
+  const { mode, activePane, browserMode } = useWorkspaceView()
   const { isConversations } = useWorkbenchRoute()
   const hasRouteStrip = useHasWorkbenchRouteStrip()
 
@@ -578,6 +584,11 @@ function MobileWorkspaceContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative h-full min-h-0 overflow-hidden">
+      {browserMode && (
+        <div className="absolute inset-0 z-50 bg-background">
+          <BrowserView />
+        </div>
+      )}
       <KeptMountedSurface hidden={!isConversations}>
         {showConversation ? (
           // Mobile mirrors the desktop chrome: no tab strip — the conversation

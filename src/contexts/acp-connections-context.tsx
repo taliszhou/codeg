@@ -1500,13 +1500,14 @@ function connectionsReducer(
 
     case "HYDRATE_FROM_SNAPSHOT": {
       const current = state.get(action.contextKey)
-      if (!current) return state
-      // Identity guard: the connection at this contextKey may have been
-      // disconnected and replaced between the snapshot fetch firing and
-      // its async response. eventSeq alone is not enough — a stale snapshot
-      // from connection A (high seq) would otherwise overwrite a fresh
-      // connection B (lastAppliedSeq=0) at the same contextKey.
-      if (current.connectionId !== action.patch.connectionId) return state
+      if (!current) {
+        console.log("[hydrate] NO_CONN contextKey="+action.contextKey.slice(0,12))
+        return state
+      }
+      if (current.connectionId !== action.patch.connectionId) {
+        console.log("[hydrate] ID_MISMATCH current="+current.connectionId.slice(0,8)+" patch="+action.patch.connectionId.slice(0,8)+" status="+current.status+" lastSeq="+current.lastAppliedSeq)
+        return state
+      }
 
       // Latched-once / fill-null fields are always safe to merge, even when
       // the snapshot is stale by event_seq. Their producing events
@@ -4672,12 +4673,14 @@ export function AcpConnectionsProvider({ children }: { children: ReactNode }) {
       sinceSeq: number | undefined
     ): EventStreamSubscription | null => {
       const stream = getEventStream()
+      console.log("[attach:setup]", contextKey.slice(0,8), "stream="+!!stream, "connId="+connectionId.slice(0,8))
       if (!stream) return null
 
       let activeSub: EventStreamSubscription | null = null
       const handlers: AttachHandlers = {
         onSnapshot: (snapshot) => {
           const patch = denormalizeSnapshot(snapshot)
+          console.log("[attach:snapshot]", contextKey.slice(0,8), "status="+patch.status, "selectors="+patch.selectorsReady, "eventSeq="+patch.eventSeq)
           dispatch({ type: "HYDRATE_FROM_SNAPSHOT", contextKey, patch })
           surfaceSnapshotErrorDetailsRef.current(contextKey, patch)
           lastActivityRef.current.set(contextKey, Date.now())

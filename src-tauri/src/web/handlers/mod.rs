@@ -40,3 +40,12 @@ pub mod web_server;
 pub mod work_task;
 pub mod workspace_files;
 pub mod workspace_state;
+// codeg 特化 handler
+pub mod claude_oauth;
+pub mod device_service;
+pub mod forward_proxy;
+pub mod internal_tunnel;
+pub mod local_npu;
+pub mod proxy_trace;
+pub mod remote_device;
+pub mod web_browser;
