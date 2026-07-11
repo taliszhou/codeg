@@ -53,7 +53,11 @@
       "office_tools": "办公工具",
       "skill_packs": "技能包",
       "quick_messages": "快捷消息",
-      "logs": "运行日志"
+      "logs": "运行日志",
+      "local_models": "本地 NPU 模型",
+      "remote_devices": "远程设备",
+      "forward_proxy": "网络跳板",
+      "proxy_trace": "代理调试"
     }
   },
   "AppearanceSettings": {
@@ -301,7 +305,30 @@
       "downloadFailed": "下载更新包失败，请稍后重试。",
       "installFailed": "安装更新失败，请关闭应用后重试。",
       "unknown": "更新失败，请稍后重试。"
-    }
+    },
+    "terminalTitle": "默认终端",
+    "terminalDescription": "选择从终端标签栏或文件树打开新终端时使用的 Shell。",
+    "defaultTerminalShell": "默认 Shell",
+    "terminalSystemDefault": "系统默认",
+    "terminalPowerShell7": "PowerShell 7 (pwsh)",
+    "terminalWindowsPowerShell": "Windows PowerShell",
+    "terminalCmd": "命令提示符 (cmd)",
+    "terminalSaveFailed": "保存终端设置失败：{message}",
+    "terminalShellCustom": "自定义路径",
+    "terminalShellCustomPath": "Shell 路径",
+    "terminalShellCustomPlaceholder": "/usr/local/bin/fish",
+    "terminalShellCustomSave": "保存",
+    "terminalShellCustomHint": "支持绝对路径，或 PATH 中可解析的命令名。",
+    "terminalShellNotInstalled": "未安装",
+    "terminalShellNotFoundWarning": "当前主机上不存在此路径。",
+    "terminalCurrentShell": "当前使用：{path}",
+    "renderingTitle": "渲染加速",
+    "renderingDescription": "如果应用出现黑屏或渲染异常（常见于 AMD 显卡或部分 Intel 集成显卡），可关闭硬件加速。仅 Windows 桌面端生效。",
+    "disableHardwareAcceleration": "禁用硬件加速",
+    "renderingSaveFailed": "渲染设置保存失败：{message}",
+    "restartRequired": "已保存，重启应用后生效。",
+    "restartNow": "立即重启",
+    "restartFailed": "重启失败：{message}"
   },
   "VersionControlSettings": {
     "loading": "加载中...",
@@ -2099,7 +2126,8 @@
       "tabs": {
         "files": "文件",
         "changes": "变更",
-        "commits": "提交"
+        "commits": "提交",
+        "diff": "差异"
       },
       "noFolderTitle": "暂无打开的文件夹",
       "noFolderHint": "打开一个文件夹后在这里查看"
@@ -2843,7 +2871,11 @@
         "confirmDelete": {
           "title": "删除命令？",
           "message": "这会移除“{name}”，此操作不可撤销。"
-        }
+        },
+        "namePlaceholder": "名称",
+        "commandPlaceholder": "命令",
+        "add": "添加",
+        "saving": "保存中..."
       }
     },
     "workspaceContext": {
@@ -3020,7 +3052,9 @@
         "mentionGroupAgent": "智能体",
         "mentionGroupSession": "会话",
         "mentionGroupCommit": "提交",
-        "mentionGroupSkill": "技能"
+        "mentionGroupSkill": "技能",
+        "expertSkills": "专家技能",
+        "expertsEmptyForAgent": "该智能体没有启用任何专家。请在「设置 > 专家」中启用。"
       },
       "messageQueue": {
         "addToQueue": "加入队列",
@@ -3240,7 +3274,15 @@
         "errorNoWorkspace": "当前没有活跃的工作区文件夹。",
         "errorFailedOpen": "打开本地文件失败",
         "errorFailedLink": "打开链接失败",
-        "errorUnsupportedLinkProtocol": "不支持该链接协议。"
+        "errorUnsupportedLinkProtocol": "不支持该链接协议。",
+        "localFileTitle": "打开本地文件？",
+        "externalLinkTitle": "打开外部链接？",
+        "localFileDescription": "即将在文件面板中打开一个本地文件。",
+        "externalLinkDescription": "即将访问一个外部网站。",
+        "cancel": "取消",
+        "opening": "正在打开…",
+        "openFile": "打开文件",
+        "openLink": "打开链接"
       },
       "fileActions": {
         "openInFinder": "在访达打开",
@@ -3304,7 +3346,9 @@
         "completedAt": "完成时间",
         "jumpToPreviousUserMessage": "跳转到上一条用户消息",
         "showMore": "展开",
-        "showLess": "收起"
+        "showLess": "收起",
+        "turnLabel": "第 {number} 轮",
+        "toolCallCount": "{count} 个工具调用"
       },
       "liveTurnStats": {
         "thinking": "思考中...",
@@ -3804,6 +3848,23 @@
     },
     "toasts": {
       "cloneFailed": "克隆仓库失败"
+    },
+    "modes": {
+      "conversation": "会话模式",
+      "fusion": "融合模式",
+      "files": "文件模式",
+      "browser": "浏览器模式",
+      "workspaceModesAria": "工作区模式"
+    },
+    "sessionFiles": {
+      "currentResponse": "当前响应",
+      "noDiffDataAvailable": "未找到 {filePath} 的差异数据",
+      "loading": "加载中...",
+      "noFileChangesInConversation": "该会话未发现文件变更",
+      "openConversationToSeeChanges": "打开会话以查看文件变更",
+      "remove": "移除",
+      "changeCount": "{count} 处变更",
+      "fileCount": "{count} 个文件"
     }
   },
   "ProjectBoot": {

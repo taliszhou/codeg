@@ -53,7 +53,11 @@
       "office_tools": "Office Tools",
       "skill_packs": "Skill Packs",
       "quick_messages": "Quick Messages",
-      "logs": "Runtime Logs"
+      "logs": "Runtime Logs",
+      "local_models": "Local NPU Models",
+      "remote_devices": "Remote Devices",
+      "forward_proxy": "Network Bridge",
+      "proxy_trace": "Proxy Trace"
     }
   },
   "AppearanceSettings": {
@@ -301,7 +305,30 @@
       "downloadFailed": "Failed to download update package. Please try again later.",
       "installFailed": "Failed to install update. Please close the app and try again.",
       "unknown": "Update failed. Please try again later."
-    }
+    },
+    "terminalTitle": "Default Terminal",
+    "terminalDescription": "Choose the shell used when opening new terminal tabs from the terminal bar or file tree.",
+    "defaultTerminalShell": "Default shell",
+    "terminalSystemDefault": "System default",
+    "terminalPowerShell7": "PowerShell 7 (pwsh)",
+    "terminalWindowsPowerShell": "Windows PowerShell",
+    "terminalCmd": "Command Prompt (cmd)",
+    "terminalSaveFailed": "Failed to save terminal settings: {message}",
+    "terminalShellCustom": "Custom path",
+    "terminalShellCustomPath": "Shell path",
+    "terminalShellCustomPlaceholder": "/usr/local/bin/fish",
+    "terminalShellCustomSave": "Save",
+    "terminalShellCustomHint": "Provide an absolute path or a name resolvable on PATH.",
+    "terminalShellNotInstalled": "not installed",
+    "terminalShellNotFoundWarning": "This path doesn't exist on this host.",
+    "terminalCurrentShell": "Currently using: {path}",
+    "renderingTitle": "Rendering",
+    "renderingDescription": "Disable hardware acceleration if the app shows a black screen or rendering glitches (common on certain AMD GPUs or Intel integrated GPUs). Only takes effect on the Windows desktop build.",
+    "disableHardwareAcceleration": "Disable hardware acceleration",
+    "renderingSaveFailed": "Failed to save rendering settings: {message}",
+    "restartRequired": "Saved. Restart the app for the change to take effect.",
+    "restartNow": "Restart now",
+    "restartFailed": "Failed to restart: {message}"
   },
   "VersionControlSettings": {
     "loading": "Loading...",
@@ -2099,7 +2126,8 @@
       "tabs": {
         "files": "Files",
         "changes": "Changes",
-        "commits": "Commits"
+        "commits": "Commits",
+        "diff": "Diff"
       },
       "noFolderTitle": "No folder open",
       "noFolderHint": "Open a folder to see its contents here"
@@ -2843,7 +2871,11 @@
         "confirmDelete": {
           "title": "Delete command?",
           "message": "This will remove \"{name}\". This action cannot be undone."
-        }
+        },
+        "namePlaceholder": "Name",
+        "commandPlaceholder": "Command",
+        "add": "Add",
+        "saving": "Saving..."
       }
     },
     "workspaceContext": {
@@ -3020,7 +3052,9 @@
         "mentionGroupAgent": "Agents",
         "mentionGroupSession": "Sessions",
         "mentionGroupCommit": "Commits",
-        "mentionGroupSkill": "Skills"
+        "mentionGroupSkill": "Skills",
+        "expertSkills": "Expert skills",
+        "expertsEmptyForAgent": "This agent has no enabled experts. Enable them in Settings > Experts."
       },
       "messageQueue": {
         "addToQueue": "Queue message",
@@ -3240,7 +3274,15 @@
         "errorNoWorkspace": "No workspace folder is currently active.",
         "errorFailedOpen": "Failed to open local file",
         "errorFailedLink": "Failed to open link",
-        "errorUnsupportedLinkProtocol": "This link protocol is not supported."
+        "errorUnsupportedLinkProtocol": "This link protocol is not supported.",
+        "localFileTitle": "Open local file?",
+        "externalLinkTitle": "Open external link?",
+        "localFileDescription": "You're about to open a local file in the Files panel.",
+        "externalLinkDescription": "You're about to visit an external website.",
+        "cancel": "Cancel",
+        "opening": "Opening...",
+        "openFile": "Open file",
+        "openLink": "Open link"
       },
       "fileActions": {
         "openInFinder": "Open in Finder",
@@ -3304,7 +3346,9 @@
         "completedAt": "Completed at",
         "jumpToPreviousUserMessage": "Jump to user message",
         "showMore": "Show more",
-        "showLess": "Show less"
+        "showLess": "Show less",
+        "turnLabel": "Turn {number}",
+        "toolCallCount": "{count} tool calls"
       },
       "liveTurnStats": {
         "thinking": "Thinking...",
@@ -3804,6 +3848,23 @@
     },
     "toasts": {
       "cloneFailed": "Failed to clone repository"
+    },
+    "modes": {
+      "conversation": "Conversation Mode",
+      "fusion": "Fusion Mode",
+      "files": "Files Mode",
+      "browser": "Browser",
+      "workspaceModesAria": "Workspace modes"
+    },
+    "sessionFiles": {
+      "currentResponse": "Current response",
+      "noDiffDataAvailable": "No diff data available for {filePath}",
+      "loading": "Loading...",
+      "noFileChangesInConversation": "No file changes found in this conversation",
+      "openConversationToSeeChanges": "Open a conversation to see its file changes",
+      "remove": "Remove",
+      "changeCount": "{count, plural, one {# change} other {# changes}}",
+      "fileCount": "{count, plural, one {# file} other {# files}}"
     }
   },
   "ProjectBoot": {

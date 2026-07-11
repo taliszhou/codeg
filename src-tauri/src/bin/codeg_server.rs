@@ -293,6 +293,7 @@ async fn async_main() -> ExitCode {
         chat_authoring_config: chat_authoring_config.clone(),
         system_op_lock: codeg_lib::app_state::default_system_op_lock(),
         update_state: codeg_lib::app_state::default_update_state(),
+        forward_proxy: Arc::new(codeg_lib::forward_proxy::ForwardProxyManager::new()),
     });
     state
         .connection_manager

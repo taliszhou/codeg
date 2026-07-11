@@ -80,6 +80,7 @@ impl GenericAgentParser {
             summary,
             turns,
             session_stats,
+            transcript_watermark: Some(raw.len() as u64),
         })
     }
 }
