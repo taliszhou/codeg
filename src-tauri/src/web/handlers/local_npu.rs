@@ -138,13 +138,13 @@ pub struct DownloadStatusParams {
 /// 模型存放优先级 (从高到低)：
 ///   1. /root/models/npu/    (容器内 = app 内部存储 /data/data/.../containers/0/root/models/npu/)
 ///                            优势：无需 MANAGE_EXTERNAL_STORAGE 权限，最可靠
-///   2. /media/sd/codeg/models/npu/  (sd 卡 via proot --bind=/storage/self/primary)
+///   2. /media/sd/mobilega/models/npu/  (sd 卡 via proot --bind=/storage/self/primary)
 ///                                       需要用户授权外存访问。
 /// list/load 时按顺序探测；download 默认写到 (1)。
 fn models_dirs() -> Vec<std::path::PathBuf> {
     vec![
         std::path::PathBuf::from("/root/models/npu"),
-        std::path::PathBuf::from("/media/sd/codeg/models/npu"),
+        std::path::PathBuf::from("/media/sd/mobilega/models/npu"),
     ]
 }
 

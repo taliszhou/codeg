@@ -150,7 +150,7 @@ async fn seed_default_providers(conn: &DatabaseConnection) -> Result<(), DbError
     Ok(())
 }
 
-/// 启动时如果检测到 SD 卡 `/media/sd/codeg/claude-credentials.json`(host adb push 过去的
+/// 启动时如果检测到 SD 卡 `/media/sd/mobilega/claude-credentials.json`(host adb push 过去的
 /// macOS Keychain 导出),自动:
 ///   1. 拷贝到容器 `~/.claude/.credentials.json`(Claude SDK 读取标准位置)
 ///   2. 在 model_provider 表里 ensure 一行 "My Claude Code (OAuth)"
@@ -160,8 +160,8 @@ async fn seed_claude_oauth_from_sdcard(conn: &DatabaseConnection) {
     use std::path::PathBuf;
 
     let seed_candidates = [
-        PathBuf::from("/media/sd/codeg/claude-credentials.json"),
-        PathBuf::from("/sdcard/codeg/claude-credentials.json"),
+        PathBuf::from("/media/sd/mobilega/claude-credentials.json"),
+        PathBuf::from("/sdcard/mobilega/claude-credentials.json"),
     ];
     let seed_path = match seed_candidates.iter().find(|p| p.exists()) {
         Some(p) => p.clone(),

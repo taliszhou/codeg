@@ -171,7 +171,7 @@ export default function ForwardProxyPage() {
         <div>
           <h1 className="text-xl font-semibold">网络跳板</h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            把 codeg-server 当成 HTTP/HTTPS forward proxy。手机或其他设备配置代理后,
+            把 mobilega-server 当成 HTTP/HTTPS forward proxy。手机或其他设备配置代理后,
             所有流量经过此 server 出口,可访问 server 本机能访问的任何网络
             (家庭内网、VPN 后的资源等)。
           </p>

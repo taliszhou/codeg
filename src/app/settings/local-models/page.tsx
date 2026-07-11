@@ -308,7 +308,7 @@ export default function LocalModelsPage() {
 
       <p className="text-xs text-muted-foreground pt-4">
         ⚠️ 实验性 - NPU 加速。模型加载耗时 5-22s(取决于大小);同一时间只能 active 一个模型。
-        激活后 codeg-server 自动用作 LLM provider。
+        激活后 mobilega-server 自动用作 LLM provider。
       </p>
     </div>
   )

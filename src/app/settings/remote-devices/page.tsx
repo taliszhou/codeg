@@ -276,8 +276,8 @@ export default function RemoteDevicesPage() {
               {dialog.editing ? "编辑远程设备" : "添加远程设备"}
             </DialogTitle>
             <DialogDescription>
-              指向运行 codeg-server 的设备。base URL 可以是 LAN IP、DDNS 域名,
-              或带端口转发的公网地址。Token 是目标 server 启动时生成的 `CODEG_TOKEN`。
+              指向运行 mobilega-server 的设备。base URL 可以是 LAN IP、DDNS 域名,
+              或带端口转发的公网地址。Token 是目标 server 启动时生成的 `MOBILEGA_TOKEN`。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -303,7 +303,7 @@ export default function RemoteDevicesPage() {
               <Label htmlFor="rd-token">Token</Label>
               <Input
                 id="rd-token"
-                placeholder="远端 server 的 CODEG_TOKEN"
+                placeholder="远端 server 的 MOBILEGA_TOKEN"
                 value={dialog.token}
                 type="password"
                 onChange={(e) => setDialog((d) => ({ ...d, token: e.target.value }))}
