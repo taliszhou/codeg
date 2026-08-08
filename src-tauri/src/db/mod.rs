@@ -110,7 +110,7 @@ pub async fn init_database(
 
     // codeg: seed 默认 NPU provider + SD卡 claude 凭证
     seed_default_providers(&conn).await?;
-    seed_claude_oauth_from_sdcard(&conn).await;)
+    seed_claude_oauth_from_sdcard(&conn).await;
 
     Ok(AppDatabase { conn })
 }

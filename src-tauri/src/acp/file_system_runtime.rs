@@ -697,6 +697,8 @@ fn agent_root_slots(agent_type: AgentType) -> &'static [RootSlot] {
         // A custom ACP agent has no codeg-known private directory layout —
         // codeg never reads its store (history comes from codeg's own ACP
         // transcript), so there is nothing to widen the sandbox roots for.
+        // codeg: 本地 Python ACP bridge 无 relocatable 目录。
+        AgentType::GenericAgent => &[],
         AgentType::Custom(_) => &[],
     }
 }

@@ -1097,6 +1097,13 @@ async fn collect_agent_diag(
                     .unwrap_or_else(|| format!("{cmd} (system CLI on PATH)"))
             });
         }
+        // codeg: 本地 Python ACP bridge，无独立 binary，用定位到的 bridge 脚本。
+        registry::AgentDistribution::Local { .. } => {
+            diag.distribution = "local";
+            diag.launchable = registry::find_genericagent_bridge().map(|p| {
+                p.to_string_lossy().to_string()
+            });
+        }
     }
 
     diag
@@ -9485,6 +9492,7 @@ pub(crate) async fn apply_model_provider_env(
             &provider.api_key,
             &model_env,
             &codex_action,
+            Some(model),
         ) {
             tracing::warn!("[ACP] codex config.toml sync at spawn failed: {e}");
         }
