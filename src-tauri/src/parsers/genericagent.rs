@@ -203,6 +203,7 @@ fn convert_block(block: &serde_json::Value) -> Option<ContentBlock> {
                 tool_use_id,
                 tool_name,
                 input_preview,
+                status: None,
                 meta: None,
             })
         }

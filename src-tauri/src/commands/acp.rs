@@ -5441,6 +5441,53 @@ fn pi_models_json_path() -> PathBuf {
 /// process env / `~/.pi/agent`. Launch-time trust seeding only has the per-agent
 /// env (the override never lands in codeg's own process env), so it must consult
 /// `runtime_env` to target the same agent dir pi-acp will spawn pi against.
+pub(crate) const PI_TRUST_WORKSPACE_ENV: &str = "PI_ACP_TRUST_WORKSPACE";
+
+/// Best-effort, idempotent pi workspace-trust seeding: pre-writes
+/// `<pi-home>/trust.json` so pi loads the folder's local config/skills
+/// without a redundant prompt. Honors explicit user decisions, never blocks.
+pub(crate) fn seed_pi_workspace_trust(
+    cwd: &std::path::Path,
+    runtime_env: &BTreeMap<String, String>,
+) {
+    if runtime_env
+        .get(PI_TRUST_WORKSPACE_ENV)
+        .is_some_and(|v| v.trim() == "0")
+    {
+        return;
+    }
+    let canonical = match std::fs::canonicalize(cwd) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::debug!("[pi] trust seed skipped: canonicalize {cwd:?} failed: {e}");
+            return;
+        }
+    };
+    let key = canonical.to_string_lossy().to_string();
+    let path = pi_agent_dir_for_env(runtime_env).join("trust.json");
+    let mut obj = match std::fs::read_to_string(&path) {
+        Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
+            Ok(serde_json::Value::Object(map)) => map,
+            _ => {
+                tracing::debug!("[pi] trust seed skipped: {path:?} is not a JSON object");
+                return;
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => serde_json::Map::new(),
+        Err(e) => {
+            tracing::debug!("[pi] trust seed skipped: read {path:?} failed: {e}");
+            return;
+        }
+    };
+    if obj.contains_key(&key) {
+        return;
+    }
+    obj.insert(key, serde_json::Value::Bool(true));
+    if let Err(e) = write_json_object_pretty(&path, &obj) {
+        tracing::debug!("[pi] trust seed write failed for {path:?}: {e}");
+    }
+}
+
 fn pi_agent_dir_for_env(runtime_env: &BTreeMap<String, String>) -> PathBuf {
     match runtime_env
         .get("PI_CODING_AGENT_DIR")

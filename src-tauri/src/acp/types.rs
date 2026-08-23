@@ -1665,3 +1665,17 @@ mod envelope_tests {
         );
     }
 }
+
+
+/// Grok's per-model reasoning-effort capability, parsed from a session
+/// response's top-level `models.availableModels[]._meta`. Drives the
+/// model-reactive composer effort selector. Backend-internal, NOT serialized.
+#[derive(Debug, Clone, Default)]
+pub struct GrokEffortSpec {
+    /// Switchable efforts the model advertises: `(id, label, description)`.
+    pub options: Vec<(String, String, Option<String>)>,
+    /// The model's default/current effort.
+    pub default: Option<String>,
+    /// Whether the model advertises `supportsReasoningEffort`.
+    pub supports: bool,
+}
