@@ -5871,6 +5871,9 @@ export async function forgeSettingsSet(
   settings: ForgePanelSettings | null
 ): Promise<ForgeSettingsStore> {
   return getTransport().call("forge_settings_set", { folderId, settings })
+}
+
+// ===== mobilega fork: Local NPU bridge + Remote Devices (both sides kept) =====
 export interface LocalNpuModelCatalog {
   models: LocalNpuModelEntry[]
   active_model_id: string | null
