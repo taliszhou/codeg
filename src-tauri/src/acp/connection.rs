@@ -3987,9 +3987,17 @@ fn build_client_capabilities(
     // and deepseek-acp (its `ask_user_question` + plan-review both build
     // standard oneOf/anyOf forms, and decode a free-text answer that is not in
     // the option set as a custom answer — the card's "Other" input round-trips
-    // cleanly). Agents without the bit fall back to their own
-    // `request_permission` button path.
-    if matches!(agent_type, AgentType::Codex | AgentType::DeepSeek) {
+    // cleanly). ClaudeCode also gets it so the ACP adapter keeps the native
+    // AskUserQuestion tool enabled (the adapter only withholds AskUserQuestion
+    // when `elicitation.form` is not advertised) — tdam-style proxy prompts
+    // rely on AskUserQuestion for session-init questions, and codeg handles
+    // `elicitation/create` + `session/elicitation_response` for all of these.
+    // Agents without the bit fall back to their own `request_permission`
+    // button path.
+    if matches!(
+        agent_type,
+        AgentType::Codex | AgentType::DeepSeek | AgentType::ClaudeCode
+    ) {
         client_capabilities = client_capabilities
             .elicitation(ElicitationCapabilities::new().form(ElicitationFormCapabilities::new()));
     }
