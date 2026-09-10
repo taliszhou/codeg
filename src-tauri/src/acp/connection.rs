@@ -1700,6 +1700,32 @@ async fn build_agent(
     debug_assert_eq!(meta.agent_type, agent_type);
 
     let agent = match meta.distribution {
+        // codeg 独有: GenericAgent 本地 Python ACP bridge (无 native binary)
+        AgentDistribution::Local { .. } => {
+            let python = registry::find_genericagent_python().ok_or_else(|| {
+                AcpError::SdkNotInstalled(
+                    "GenericAgent is not installed. Python was not found in PATH.".to_string(),
+                )
+            })?;
+            let bridge = registry::find_genericagent_bridge().ok_or_else(|| {
+                AcpError::SdkNotInstalled(
+                    "GenericAgent is not installed. genericagent_acp_bridge.py was not found."
+                        .to_string(),
+                )
+            })?;
+            let bridge_str = bridge.to_string_lossy().to_string();
+            let refs = vec![python.as_str(), bridge_str.as_str()];
+            let agent_name = meta.name.to_string();
+            AcpAgent::from_args(&refs)
+                .map(|a| {
+                    a.with_debug(move |line, dir| {
+                        if dir == sacp_tokio::LineDirection::Stderr {
+                            tracing::debug!("[ACP][{agent_name}][stderr] {line}");
+                        }
+                    })
+                })
+                .map_err(|e| AcpError::SpawnFailed(e.to_string()))
+        }
         AgentDistribution::Npx { cmd, args, env, .. } => {
             // pi-acp spawns the real `pi` binary; fail fast with a clear,
             // install-prompt-routable error if it (or a BYO-pi override) isn't

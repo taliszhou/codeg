@@ -128,6 +128,7 @@ fn build_message(idx: usize, msg: &serde_json::Value) -> UnifiedMessage {
         timestamp: Utc::now(),
         usage: None,
         duration_ms: None,
+        agent_message_id: None,
         model: None,
         completed_at: None,
     }
@@ -310,6 +311,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 duration_ms: None,
                 model: None,
                 completed_at: None,
+                agent_message_id: None,
             });
         } else {
             if msg.content.is_empty() {
@@ -323,6 +325,7 @@ fn group_into_turns(messages: Vec<UnifiedMessage>) -> Vec<MessageTurn> {
                 timestamp: msg.timestamp,
                 usage: None,
                 duration_ms: None,
+                agent_message_id: None,
                 model: None,
                 completed_at: None,
             });

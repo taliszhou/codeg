@@ -178,6 +178,8 @@ impl AcpAgentMeta {
         match &self.distribution {
             AgentDistribution::Npx { .. } => true,
             AgentDistribution::Uvx { .. } => false,
+            // codeg 独有: 本地 Python bridge，无下载渠道
+            AgentDistribution::Local { .. } => false,
             AgentDistribution::Binary {
                 version, platforms, ..
             } => platforms
@@ -450,6 +452,8 @@ fn distribution_uses_cursor_acp(distribution: &AgentDistribution) -> bool {
         AgentDistribution::Npx { cmd, args, .. } | AgentDistribution::Binary { cmd, args, .. } => {
             launch_spec_uses_cursor_acp(cmd, args)
         }
+        // codeg 独有: 本地 Python bridge 不跑 cursor-agent
+        AgentDistribution::Local { .. } => false,
         AgentDistribution::Uvx {
             cmd,
             args,
