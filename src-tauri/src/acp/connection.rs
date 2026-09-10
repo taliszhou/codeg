@@ -1769,6 +1769,25 @@ async fn build_agent(
                 None
             };
             apply_codex_env_policy(agent_type, &mut merged_env, codex_initial_mode.as_deref());
+            // codeg: ClaudeCode 经 npm 包启动，sdk 内置 native binary 被
+            // --omit=optional 跳过。手机端随 APK ship 了 Anthropic 官方 claude
+            // CLI 到容器 /usr/local/bin/claude，直接指过去即可。
+            if agent_type == AgentType::ClaudeCode
+                && !merged_env.iter().any(|(k, _)| k == "CLAUDE_CODE_EXECUTABLE")
+            {
+                let candidates = ["/usr/local/bin/claude", "/opt/agents/claude"];
+                let resolved = candidates
+                    .iter()
+                    .find(|p| std::path::Path::new(p).exists())
+                    .map(|s| s.to_string())
+                    .or_else(|| {
+                        crate::commands::acp::resolve_command_on_path("claude")
+                            .map(|p| p.to_string_lossy().to_string())
+                    });
+                if let Some(claude_bin) = resolved {
+                    merged_env.push(("CLAUDE_CODE_EXECUTABLE".to_string(), claude_bin));
+                }
+            }
             // codex-acp 1.0.0 honors APP_SERVER_LOGS as a directory for its
             // adapter-side logs. Surface it only under CODEG_ACP_DEBUG so
             // default runs are unchanged; a directory-creation failure silently
